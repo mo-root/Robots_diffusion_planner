@@ -1,0 +1,27 @@
+# Default training configuration
+# Usage: python src/train.py @configs/default.yaml (or pass args directly)
+
+# Data
+train_dir: data/train
+val_dir: data/val
+
+# Model
+base_channels: 32
+channel_mults: [1, 2, 4, 4]
+time_dim: 128
+
+# Diffusion
+T: 1000
+
+# Training
+batch_size: 64
+epochs: 100
+lr: 0.0001
+num_workers: 4
+
+# Logging
+save_every: 10
+sample_every: 5
+val_every: 2
+ckpt_dir: results/checkpoints
+log_dir: results
