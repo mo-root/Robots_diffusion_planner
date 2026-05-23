@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+from artifacts import save_denoising_gif, save_diversity_grid, save_uncertainty_map
 from dataset import MapCompletionDataset
 from diffusion import DDPMScheduler
 from unet import ConditionalUNet
@@ -31,6 +32,8 @@ def train(args):
     device = torch.device(args.device)
     os.makedirs(args.ckpt_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.log_dir, "samples"), exist_ok=True)
+    os.makedirs(os.path.join(args.log_dir, "gifs"), exist_ok=True)
 
     print(f"Device: {device}")
     print(f"Loading training data from {args.train_dir}...")
@@ -156,6 +159,26 @@ def train(args):
         if (epoch + 1) % args.sample_every == 0:
             generate_samples(model, scheduler, val_loader or train_loader,
                              device, epoch, args.log_dir)
+
+            loader = val_loader or train_loader
+            batch = next(iter(loader))
+            pm = batch["partial_map"][:1].to(device)
+            km = batch["known_mask"][:1].to(device)
+            fm = batch["full_map"][:1].to(device)
+
+            gif_dir = os.path.join(args.log_dir, "gifs")
+            os.makedirs(gif_dir, exist_ok=True)
+            try:
+                save_denoising_gif(model, scheduler, pm, km, device,
+                                   os.path.join(gif_dir, f"denoise_epoch{epoch+1:04d}.gif"))
+                save_diversity_grid(model, scheduler, pm, km, fm, device,
+                                    os.path.join(args.log_dir, "samples",
+                                                 f"diversity_epoch{epoch+1:04d}.png"))
+                save_uncertainty_map(model, scheduler, pm, km, device,
+                                     os.path.join(args.log_dir, "samples",
+                                                  f"uncertainty_epoch{epoch+1:04d}.png"))
+            except Exception as e:
+                print(f"Artifact generation failed: {e}")
 
         with open(os.path.join(args.log_dir, "history.json"), "w") as f:
             json.dump(history, f)
