@@ -1,0 +1,135 @@
+[
+  {
+    "step": 0,
+    "world_x": 2.0,
+    "world_y": 2.0,
+    "pixel_y": 204,
+    "pixel_x": 51
+  },
+  {
+    "step": 1,
+    "world_x": 3.633,
+    "world_y": 2.852,
+    "pixel_y": 183,
+    "pixel_x": 93,
+    "score": 470.9,
+    "coverage": 0.182
+  },
+  {
+    "step": 2,
+    "world_x": 1.211,
+    "world_y": 4.883,
+    "pixel_y": 131,
+    "pixel_x": 31,
+    "score": 552.8,
+    "coverage": 0.279
+  },
+  {
+    "step": 3,
+    "world_x": 5.977,
+    "world_y": 3.867,
+    "pixel_y": 157,
+    "pixel_x": 153,
+    "score": 339.6,
+    "coverage": 0.296
+  },
+  {
+    "step": 4,
+    "world_x": 7.422,
+    "world_y": 6.133,
+    "pixel_y": 99,
+    "pixel_x": 190,
+    "score": 712.8,
+    "coverage": 0.391
+  },
+  {
+    "step": 5,
+    "world_x": 4.922,
+    "world_y": 7.734,
+    "pixel_y": 58,
+    "pixel_x": 126,
+    "score": 753.2,
+    "coverage": 0.491
+  },
+  {
+    "step": 6,
+    "world_x": 3.086,
+    "world_y": 6.055,
+    "pixel_y": 101,
+    "pixel_x": 79,
+    "score": 507.1,
+    "coverage": 0.528
+  },
+  {
+    "step": 7,
+    "world_x": 8.32,
+    "world_y": 2.461,
+    "pixel_y": 193,
+    "pixel_x": 213,
+    "score": 457.5,
+    "coverage": 0.605
+  },
+  {
+    "step": 8,
+    "world_x": 9.102,
+    "world_y": 3.789,
+    "pixel_y": 159,
+    "pixel_x": 233,
+    "score": 341.9,
+    "coverage": 0.668
+  },
+  {
+    "step": 9,
+    "world_x": 0.898,
+    "world_y": 7.812,
+    "pixel_y": 56,
+    "pixel_x": 23,
+    "score": 315.1,
+    "coverage": 0.698
+  },
+  {
+    "step": 10,
+    "world_x": 4.297,
+    "world_y": 0.469,
+    "pixel_y": 244,
+    "pixel_x": 110,
+    "score": 195.0,
+    "coverage": 0.705
+  },
+  {
+    "step": 11,
+    "world_x": 6.836,
+    "world_y": 1.523,
+    "pixel_y": 217,
+    "pixel_x": 175,
+    "score": 523.8,
+    "coverage": 0.775
+  },
+  {
+    "step": 12,
+    "world_x": 8.789,
+    "world_y": 6.172,
+    "pixel_y": 98,
+    "pixel_x": 225,
+    "score": 81.8,
+    "coverage": 0.788
+  },
+  {
+    "step": 13,
+    "world_x": 9.062,
+    "world_y": 8.242,
+    "pixel_y": 45,
+    "pixel_x": 232,
+    "score": 81.9,
+    "coverage": 0.815
+  },
+  {
+    "step": 14,
+    "world_x": 8.125,
+    "world_y": 9.18,
+    "pixel_y": 21,
+    "pixel_x": 208,
+    "score": 322.9,
+    "coverage": 0.833
+  }
+]
