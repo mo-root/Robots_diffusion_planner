@@ -1,0 +1,53 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{yamauchi1997frontier}
+\citation{shrestha2019learned}
+\citation{ho2020ddpm}
+\citation{bourgault2002information}
+\citation{li2020houseexpo}
+\citation{ronneberger2015unet}
+\citation{ho2020ddpm}
+\citation{song2020ddim}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Method}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Problem Formulation}{1}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Data Generation}{1}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Model Architecture}{1}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Training}{1}{subsection.2.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces System pipeline: HouseExpo floor plans are used to generate training data via lidar simulation. The trained U-Net performs conditional denoising to complete partial maps. Multiple completions score frontiers for autonomous exploration.}}{2}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:pipeline}{{1}{2}{System pipeline: HouseExpo floor plans are used to generate training data via lidar simulation. The trained U-Net performs conditional denoising to complete partial maps. Multiple completions score frontiers for autonomous exploration}{figure.caption.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Training convergence (left) and validation IoU (right) over 29 epochs. Loss drops from 0.033 to 0.0007.}}{2}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:loss}{{2}{2}{Training convergence (left) and validation IoU (right) over 29 epochs. Loss drops from 0.033 to 0.0007}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-E}}Frontier Scoring}{2}{subsection.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Experiments}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Map Prediction Quality}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Evaluation metrics (100 test maps, $K=8$)}}{2}{table.caption.4}\protected@file@percent }
+\newlabel{tab:metrics}{{I}{2}{Evaluation metrics (100 test maps, $K=8$)}{table.caption.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Prediction IoU vs.\ number of input scans. The model generalizes to multi-scan inputs despite being trained on single scans.}}{2}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:coverage}{{3}{2}{Prediction IoU vs.\ number of input scans. The model generalizes to multi-scan inputs despite being trained on single scans}{figure.caption.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Frontier Scoring Comparison}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Exploration Simulation}{2}{subsection.3.3}\protected@file@percent }
+\citation{chen2024diffusion}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Frontier scoring: actual information gain at chosen frontier}}{3}{table.caption.5}\protected@file@percent }
+\newlabel{tab:comparison}{{II}{3}{Frontier scoring: actual information gain at chosen frontier}{table.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Low coverage (1 scan) vs.\ high coverage (5 scans) predictions. Two maps achieve perfect IoU (1.00) with 5 scans.}}{3}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:lowhigh}{{4}{3}{Low coverage (1 scan) vs.\ high coverage (5 scans) predictions. Two maps achieve perfect IoU (1.00) with 5 scans}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Integration}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Discussion}{3}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Data generation pipeline: floor plan with robot position, lidar raycasting, visibility mask, and resulting partial map input.}}{3}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:lidar}{{5}{3}{Data generation pipeline: floor plan with robot position, lidar raycasting, visibility mask, and resulting partial map input}{figure.caption.7}{}}
+\bibstyle{IEEEtran}
+\bibcite{yamauchi1997frontier}{1}
+\bibcite{ho2020ddpm}{2}
+\bibcite{song2020ddim}{3}
+\bibcite{li2020houseexpo}{4}
+\bibcite{shrestha2019learned}{5}
+\bibcite{ronneberger2015unet}{6}
+\bibcite{bourgault2002information}{7}
+\bibcite{chen2024diffusion}{8}
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Conclusion}{4}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{4}{section*.8}\protected@file@percent }
+\gdef \@abspage@last{4}
