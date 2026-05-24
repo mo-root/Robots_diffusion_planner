@@ -21,15 +21,45 @@ Partial Map (lidar)     Diffusion Model        Scored Frontiers
 
 The model generates **multiple plausible completions** (K=8 samples), and frontiers are scored by expected information gain + uncertainty bonus. This replaces the standard "biggest unknown patch" heuristic with a learned structural prior.
 
+## Results
+
+| Metric | Value |
+|---|---|
+| **Pixel Accuracy** | 82.0% |
+| **IoU (1 scan)** | 0.621 |
+| **IoU (5 scans)** | 0.875 |
+| **Info Gain vs Baseline** | +24.5% |
+| **Training Time** | ~10 hours (Tesla T4) |
+
+![Results](results/presentation/04_results_poster.png)
+
+### Key Finding: More Coverage = Better Predictions
+
+The model was trained on single-scan inputs (~10% coverage) but generalizes to multi-scan inputs. With realistic exploration coverage (5-8 scans), IoU jumps to 0.88-1.00.
+
+![Coverage](results/coverage_analysis/coverage_comparison_bar.png)
+
+### Denoising Process
+
+Watch noise transform into a predicted floor plan:
+
+![Denoising](results/showcase/02_denoising_process.gif)
+
+### Exploration Demo
+
+The robot explores a maze using diffusion-guided frontier selection:
+
+![Exploration](results/stage_demo/maze_exploration.gif)
+
 ## Architecture
 
 | Component | Description |
 |---|---|
-| **Model** | Conditional U-Net (~4.3M params) with sinusoidal time embeddings |
+| **Model** | Conditional U-Net (~4.2M params) with sinusoidal time embeddings |
 | **Training** | DDPM (Ho et al. 2020), 1000 diffusion steps, MSE noise prediction loss |
 | **Inference** | DDIM sampling (50 steps) for fast generation |
-| **Data** | HouseExpo dataset (35k floor plans) with synthetic lidar simulation |
-| **Integration** | ROS 2 Humble node, connects to PA4 mapper + PA3 planner |
+| **Data** | HouseExpo dataset (35k floor plans), 2.66M synthetic training pairs |
+| **Integration** | ROS 2 Humble nodes, connects to PA4 mapper + PA3 planner |
 
 ## Project Structure
 
