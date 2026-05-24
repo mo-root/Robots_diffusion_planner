@@ -5,7 +5,10 @@ Usage:
     python src/train.py --train_dir data/train --val_dir data/val --device mps --batch_size 8
 
     # AWS GPU:
-    python src/train.py --train_dir data/train --val_dir data/val --device cuda --batch_size 64
+    python src/train.py --train_dir data/train --val_dir data/val --device cuda --batch_size 32
+
+    # With W&B:
+    python src/train.py --train_dir data/train --val_dir data/val --device cuda --batch_size 32 --wandb
 """
 
 import argparse
@@ -35,6 +38,17 @@ def train(args):
     os.makedirs(os.path.join(args.log_dir, "samples"), exist_ok=True)
     os.makedirs(os.path.join(args.log_dir, "gifs"), exist_ok=True)
 
+    # W&B setup
+    wandb_run = None
+    if args.wandb:
+        import wandb
+        wandb_run = wandb.init(
+            project="diffusion-map-completion",
+            name=args.wandb_name or f"run_{time.strftime('%m%d_%H%M')}",
+            config=vars(args),
+            save_code=True,
+        )
+
     print(f"Device: {device}")
     print(f"Loading training data from {args.train_dir}...")
     train_ds = MapCompletionDataset(args.train_dir)
@@ -47,13 +61,14 @@ def train(args):
 
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.num_workers, pin_memory=True, drop_last=True,
+        num_workers=args.num_workers, pin_memory=(device.type == "cuda"),
+        drop_last=True,
     )
     val_loader = None
     if val_ds:
         val_loader = DataLoader(
             val_ds, batch_size=args.batch_size, shuffle=False,
-            num_workers=args.num_workers, pin_memory=True,
+            num_workers=args.num_workers, pin_memory=(device.type == "cuda"),
         )
 
     model = ConditionalUNet(
@@ -62,10 +77,10 @@ def train(args):
         channel_mults=tuple(args.channel_mults),
         time_dim=args.time_dim,
     ).to(device)
-    print(f"  Model: {sum(p.numel() for p in model.parameters()):,} parameters")
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"  Model: {n_params:,} parameters")
 
     scheduler = DDPMScheduler(num_timesteps=args.T, device=device)
-
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
@@ -77,12 +92,14 @@ def train(args):
         start_epoch = ckpt.get("epoch", 0) + 1
         print(f"  Resumed from epoch {start_epoch}")
 
-    history = {"train_loss": [], "val_loss": [], "epoch": []}
+    history = {"train_loss": [], "val_loss": [], "epoch": [], "iou": []}
 
     scaler = None
     use_amp = device.type == "cuda"
     if use_amp:
         scaler = torch.amp.GradScaler()
+
+    global_step = start_epoch * min(args.max_steps, len(train_loader))
 
     for epoch in range(start_epoch, args.epochs):
         model.train()
@@ -90,7 +107,10 @@ def train(args):
         n_batches = 0
         t0 = time.time()
 
-        for batch in train_loader:
+        for batch_idx, batch in enumerate(train_loader):
+            if args.max_steps and batch_idx >= args.max_steps:
+                break
+
             partial_map = batch["partial_map"].to(device)
             known_mask = batch["known_mask"].to(device)
             full_map = batch["full_map"].to(device)
@@ -117,35 +137,45 @@ def train(args):
             optimizer.zero_grad(set_to_none=True)
             epoch_loss += loss.item()
             n_batches += 1
+            global_step += 1
+
+            if wandb_run and batch_idx % 50 == 0:
+                wandb_run.log({
+                    "train/loss_step": loss.item(),
+                    "train/lr": optimizer.param_groups[0]["lr"],
+                    "train/global_step": global_step,
+                }, step=global_step)
+
+            if batch_idx % 200 == 0:
+                print(f"  [{batch_idx}/{min(args.max_steps or len(train_loader), len(train_loader))}] "
+                      f"loss: {loss.item():.5f}")
 
         lr_sched.step()
         avg_train_loss = epoch_loss / max(n_batches, 1)
         elapsed = time.time() - t0
 
         val_loss = None
+        val_iou = None
         if val_loader and (epoch + 1) % args.val_every == 0:
-            model.eval()
-            vloss = 0.0
-            vn = 0
-            with torch.no_grad():
-                for batch in val_loader:
-                    partial_map = batch["partial_map"].to(device)
-                    known_mask = batch["known_mask"].to(device)
-                    full_map = batch["full_map"].to(device)
-                    t = torch.randint(0, args.T, (full_map.shape[0],), device=device)
-                    x_noisy, noise = scheduler.q_sample(full_map, t)
-                    pred = model(x_noisy, t, partial_map, known_mask)
-                    vloss += F.mse_loss(pred, noise).item()
-                    vn += 1
-            val_loss = vloss / max(vn, 1)
+            val_loss, val_iou = validate(model, scheduler, val_loader, device, args.T)
 
         history["epoch"].append(epoch)
         history["train_loss"].append(avg_train_loss)
         history["val_loss"].append(val_loss)
+        history["iou"].append(val_iou)
 
         vstr = f" | val_loss: {val_loss:.5f}" if val_loss is not None else ""
-        print(f"Epoch {epoch+1}/{args.epochs} | loss: {avg_train_loss:.5f}{vstr}"
+        istr = f" | val_iou: {val_iou:.3f}" if val_iou is not None else ""
+        print(f"Epoch {epoch+1}/{args.epochs} | loss: {avg_train_loss:.5f}{vstr}{istr}"
               f" | lr: {optimizer.param_groups[0]['lr']:.2e} | {elapsed:.1f}s")
+
+        if wandb_run:
+            log = {"train/loss_epoch": avg_train_loss, "train/epoch": epoch + 1}
+            if val_loss is not None:
+                log["val/loss"] = val_loss
+            if val_iou is not None:
+                log["val/iou"] = val_iou
+            wandb_run.log(log, step=global_step)
 
         if (epoch + 1) % args.save_every == 0 or epoch == args.epochs - 1:
             ckpt_path = os.path.join(args.ckpt_dir, f"model_epoch{epoch+1:04d}.pt")
@@ -153,12 +183,14 @@ def train(args):
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "epoch": epoch,
+                "train_loss": avg_train_loss,
+                "val_loss": val_loss,
                 "args": vars(args),
             }, ckpt_path)
 
         if (epoch + 1) % args.sample_every == 0:
-            generate_samples(model, scheduler, val_loader or train_loader,
-                             device, epoch, args.log_dir)
+            sample_imgs = generate_samples(model, scheduler, val_loader or train_loader,
+                                           device, epoch, args.log_dir)
 
             loader = val_loader or train_loader
             batch = next(iter(loader))
@@ -167,16 +199,26 @@ def train(args):
             fm = batch["full_map"][:1].to(device)
 
             gif_dir = os.path.join(args.log_dir, "gifs")
-            os.makedirs(gif_dir, exist_ok=True)
             try:
-                save_denoising_gif(model, scheduler, pm, km, device,
-                                   os.path.join(gif_dir, f"denoise_epoch{epoch+1:04d}.gif"))
-                save_diversity_grid(model, scheduler, pm, km, fm, device,
-                                    os.path.join(args.log_dir, "samples",
-                                                 f"diversity_epoch{epoch+1:04d}.png"))
-                save_uncertainty_map(model, scheduler, pm, km, device,
-                                     os.path.join(args.log_dir, "samples",
-                                                  f"uncertainty_epoch{epoch+1:04d}.png"))
+                gif_path = os.path.join(gif_dir, f"denoise_epoch{epoch+1:04d}.gif")
+                save_denoising_gif(model, scheduler, pm, km, device, gif_path)
+
+                div_path = os.path.join(args.log_dir, "samples",
+                                        f"diversity_epoch{epoch+1:04d}.png")
+                save_diversity_grid(model, scheduler, pm, km, fm, device, div_path)
+
+                unc_path = os.path.join(args.log_dir, "samples",
+                                        f"uncertainty_epoch{epoch+1:04d}.png")
+                save_uncertainty_map(model, scheduler, pm, km, device, unc_path)
+
+                if wandb_run:
+                    import wandb as wb
+                    wandb_run.log({
+                        "samples/predictions": wb.Image(sample_imgs),
+                        "samples/diversity": wb.Image(div_path),
+                        "samples/uncertainty": wb.Image(unc_path),
+                        "samples/denoising_gif": wb.Video(gif_path, fps=10, format="gif"),
+                    }, step=global_step)
             except Exception as e:
                 print(f"Artifact generation failed: {e}")
 
@@ -184,13 +226,51 @@ def train(args):
             json.dump(history, f)
         plot_loss(history, os.path.join(args.log_dir, "loss_curve.png"))
 
+    ckpt_path = os.path.join(args.ckpt_dir, "model_final.pt")
     torch.save({
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "epoch": args.epochs - 1,
         "args": vars(args),
-    }, os.path.join(args.ckpt_dir, "model_final.pt"))
-    print(f"Training complete. Final model saved to {args.ckpt_dir}/model_final.pt")
+    }, ckpt_path)
+    print(f"Training complete. Final model saved to {ckpt_path}")
+
+    if wandb_run:
+        import wandb as wb
+        wandb_run.log({"results/loss_curve": wb.Image(
+            os.path.join(args.log_dir, "loss_curve.png"))}, step=global_step)
+        artifact = wb.Artifact("model-final", type="model")
+        artifact.add_file(ckpt_path)
+        wandb_run.log_artifact(artifact)
+        wandb_run.finish()
+
+
+@torch.no_grad()
+def validate(model, scheduler, val_loader, device, T):
+    model.eval()
+    vloss = 0.0
+    vn = 0
+    ious = []
+
+    for batch in val_loader:
+        partial_map = batch["partial_map"].to(device)
+        known_mask = batch["known_mask"].to(device)
+        full_map = batch["full_map"].to(device)
+
+        t = torch.randint(0, T, (full_map.shape[0],), device=device)
+        x_noisy, noise = scheduler.q_sample(full_map, t)
+        pred = model(x_noisy, t, partial_map, known_mask)
+        vloss += F.mse_loss(pred, noise).item()
+        vn += 1
+
+    if vn > 0:
+        pred_maps = scheduler.sample_ddim(model, partial_map[:4], known_mask[:4], num_steps=50)
+        for i in range(min(4, pred_maps.shape[0])):
+            gt = (full_map[i, 0].cpu().numpy() + 1) / 2
+            p = (pred_maps[i, 0].cpu().numpy() + 1) / 2
+            ious.append(compute_iou(gt, p))
+
+    return vloss / max(vn, 1), np.mean(ious) if ious else None
 
 
 @torch.no_grad()
@@ -236,8 +316,10 @@ def generate_samples(model, scheduler, loader, device, epoch, log_dir, num_sampl
 
     plt.suptitle(f"Epoch {epoch + 1}")
     plt.tight_layout()
-    plt.savefig(os.path.join(log_dir, f"samples_epoch{epoch+1:04d}.png"), dpi=100)
+    save_path = os.path.join(log_dir, f"samples_epoch{epoch+1:04d}.png")
+    plt.savefig(save_path, dpi=100)
     plt.close()
+    return save_path
 
 
 def compute_iou(gt, pred, threshold=0.5):
@@ -249,19 +331,34 @@ def compute_iou(gt, pred, threshold=0.5):
 
 
 def plot_loss(history, save_path):
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(history["epoch"], history["train_loss"], label="Train Loss", color="blue")
-    val = [v for v in history["val_loss"] if v is not None]
-    val_epochs = [e for e, v in zip(history["epoch"], history["val_loss"]) if v is not None]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].plot(history["epoch"], history["train_loss"], label="Train", color="blue", linewidth=2)
+    val = [(e, v) for e, v in zip(history["epoch"], history["val_loss"]) if v is not None]
     if val:
-        ax.plot(val_epochs, val, label="Val Loss", color="orange")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("MSE Loss")
-    ax.set_title("Training Loss")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+        axes[0].plot(*zip(*val), label="Val", color="orange", linewidth=2)
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("MSE Loss")
+    axes[0].set_title("Training & Validation Loss")
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    ious = [(e, v) for e, v in zip(history["epoch"], history.get("iou", [])) if v is not None]
+    if ious:
+        axes[1].plot(*zip(*ious), label="Val IoU", color="green", linewidth=2, marker="o", markersize=4)
+        axes[1].set_xlabel("Epoch")
+        axes[1].set_ylabel("IoU")
+        axes[1].set_title("Map Prediction IoU")
+        axes[1].set_ylim(0, 1)
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+    else:
+        axes[1].text(0.5, 0.5, "IoU computed\nstarting epoch 2", ha="center", va="center",
+                     fontsize=14, color="gray", transform=axes[1].transAxes)
+        axes[1].set_title("Map Prediction IoU")
+
     plt.tight_layout()
-    plt.savefig(save_path, dpi=100)
+    plt.savefig(save_path, dpi=150)
     plt.close()
 
 
@@ -283,6 +380,10 @@ if __name__ == "__main__":
     parser.add_argument("--save_every", type=int, default=10)
     parser.add_argument("--sample_every", type=int, default=5)
     parser.add_argument("--val_every", type=int, default=2)
+    parser.add_argument("--max_steps", type=int, default=2000,
+                        help="Max batches per epoch (caps epoch length for large datasets)")
     parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--wandb", action="store_true", help="Enable W&B logging")
+    parser.add_argument("--wandb_name", type=str, default=None)
     args = parser.parse_args()
     train(args)
