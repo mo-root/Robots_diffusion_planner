@@ -107,7 +107,7 @@ class ConditionalUNet(nn.Module):
         self.downs = nn.ModuleList()
         in_ch = base_channels
         for i, out_ch in enumerate(channels):
-            has_attn = i >= 2
+            has_attn = i == len(channels) - 1
             self.downs.append(DownBlock(in_ch, out_ch, time_dim, has_attn))
             in_ch = out_ch
 
@@ -117,7 +117,7 @@ class ConditionalUNet(nn.Module):
 
         self.ups = nn.ModuleList()
         for i, out_ch in enumerate(reversed(channels)):
-            has_attn = (len(channels) - 1 - i) >= 2
+            has_attn = i == 0
             up_in = channels[-1] if i == 0 else channels[len(channels) - i]
             self.ups.append(UpBlock(up_in, out_ch, time_dim, has_attn))
 
