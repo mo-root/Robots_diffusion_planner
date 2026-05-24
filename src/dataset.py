@@ -1,5 +1,6 @@
 """PyTorch Dataset for loading generated (partial_map, full_map) pairs."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,15 @@ from torch.utils.data import Dataset
 
 class MapCompletionDataset(Dataset):
     def __init__(self, data_dir: str):
-        self.files = sorted(Path(data_dir).glob("*.npz"))
+        cache_path = os.path.join(data_dir, "_filelist.txt")
+        if os.path.exists(cache_path):
+            with open(cache_path) as f:
+                names = [line.strip() for line in f if line.strip()]
+        else:
+            names = [n for n in os.listdir(data_dir) if n.endswith(".npz")]
+            with open(cache_path, "w") as f:
+                f.writelines(n + "\n" for n in names)
+        self.files = [os.path.join(data_dir, n) for n in names]
         if not self.files:
             raise ValueError(f"No .npz files in {data_dir}")
 
