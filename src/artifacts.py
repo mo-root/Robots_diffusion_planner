@@ -82,8 +82,9 @@ def save_denoising_gif(model, scheduler, partial_map, known_mask, device,
 
             plt.tight_layout()
             fig.canvas.draw()
+            buf = fig.canvas.buffer_rgba()
             w, h = fig.canvas.get_width_height()
-            frame_arr = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+            frame_arr = np.asarray(buf).reshape(h, w, 4)[:, :, :3].copy()
             frames.append(Image.fromarray(frame_arr))
             plt.close()
 
