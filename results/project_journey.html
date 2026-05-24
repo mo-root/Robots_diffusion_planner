@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diffusion Map Completion - Project Journey</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.7; }
+.hero { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); padding: 80px 40px; text-align: center; }
+.hero h1 { font-size: 2.8em; color: #fff; margin-bottom: 10px; }
+.hero h2 { font-size: 1.3em; color: #64b5f6; font-weight: 300; }
+.hero .meta { color: #90a4ae; margin-top: 15px; font-size: 0.95em; }
+
+.timeline { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+.phase { margin-bottom: 60px; }
+.phase-header { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 2px solid #333; }
+.phase-num { background: #1565c0; color: #fff; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2em; flex-shrink: 0; }
+.phase-title { font-size: 1.6em; color: #fff; }
+.phase-date { color: #64b5f6; font-size: 0.9em; margin-left: auto; }
+
+.card { background: #1a1a1a; border-radius: 12px; padding: 25px; margin-bottom: 20px; border: 1px solid #2a2a2a; }
+.card h3 { color: #81c784; margin-bottom: 10px; font-size: 1.15em; }
+.card p { color: #bbb; margin-bottom: 12px; }
+.card img { width: 100%; border-radius: 8px; margin: 10px 0; border: 1px solid #333; }
+.card .gif-container { text-align: center; margin: 15px 0; }
+.card .gif-container img { max-width: 100%; }
+
+.metric-row { display: flex; gap: 15px; flex-wrap: wrap; margin: 15px 0; }
+.metric { background: #222; border-radius: 8px; padding: 15px 20px; flex: 1; min-width: 140px; text-align: center; border: 1px solid #333; }
+.metric .value { font-size: 1.8em; font-weight: bold; color: #4caf50; }
+.metric .label { font-size: 0.85em; color: #999; margin-top: 3px; }
+
+.code-block { background: #111; border-radius: 6px; padding: 15px; font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em; color: #90caf9; overflow-x: auto; margin: 10px 0; border: 1px solid #333; }
+
+.highlight { background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%); border-color: #4caf50; }
+.highlight h3 { color: #fff; }
+
+.status-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+.status-done { background: #1b5e20; color: #81c784; }
+.status-partial { background: #e65100; color: #ffcc80; }
+.status-todo { background: #333; color: #999; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+.arrow-down { text-align: center; font-size: 2em; color: #444; margin: 10px 0; }
+
+.summary-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+.summary-table th { background: #1565c0; color: #fff; padding: 10px 15px; text-align: left; }
+.summary-table td { padding: 10px 15px; border-bottom: 1px solid #2a2a2a; }
+.summary-table tr:nth-child(even) { background: #1a1a1a; }
+
+.footer { text-align: center; padding: 40px; color: #666; border-top: 1px solid #222; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>Diffusion-Based Map Completion</h1>
+    <h2>for Frontier Exploration</h2>
+    <p class="meta">COSC 81/281 Final Project &mdash; Moin Mattar &mdash; Dartmouth College, Spring 2026</p>
+</div>
+
+<div class="timeline">
+
+<!-- PHASE 1: The Idea -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">1</div>
+        <div class="phase-title">The Problem</div>
+        <div class="phase-date">May 20</div>
+    </div>
+    <div class="card">
+        <h3>What if a robot could imagine what's behind walls?</h3>
+        <p>Standard frontier exploration is blind: the robot picks the nearest unknown area and drives there. It has no idea if that area hides a big open room or a dead-end closet.</p>
+        <p><strong>Our idea:</strong> Train a neural network to predict what the complete map looks like from partial lidar observations. Use those predictions to make smarter exploration decisions.</p>
+        <div class="code-block">
+Partial Map (what robot sees)    →    Predicted Map (what model imagines)    →    Best Frontier (where to go)
+ ████████████                         ████████████                              "Frontier B leads to a
+ █·····??????                         █·····██···█                               big room. Go there."
+ █··R··??????          diffusion      █··R··██···█         scoring
+ █·····??????          model          █·····█    █         algorithm
+ ████████████                         ████████████
+        </div>
+        <p><strong>Key insight:</strong> The diffusion model generates <em>multiple</em> plausible completions. The disagreement between them tells us where the robot should explore (high uncertainty = high value).</p>
+    </div>
+</div>
+
+<!-- PHASE 2: Data -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">2</div>
+        <div class="phase-title">Data Pipeline</div>
+        <div class="phase-date">May 23</div>
+    </div>
+    <div class="card">
+        <h3>HouseExpo: 35,126 Real Indoor Floor Plans</h3>
+        <p>We use the HouseExpo dataset (Li et al., IROS 2020) as ground truth. For each floor plan, we simulate lidar scans from random robot positions to create (partial map, full map) training pairs.</p>
+        <img src="data_artifacts/05_lidar_raycasting.png" alt="Lidar raycasting visualization">
+        <p class="caption">Lidar raycasting simulation: floor plan → rays → visibility mask → partial map</p>
+    </div>
+    <div class="two-col">
+        <div class="card">
+            <h3>Data Augmentation</h3>
+            <p>Each sample is rotated (90/180/270) and flipped horizontally, giving 8x more training data. Professor Alberto specifically recommended this.</p>
+            <img src="data_artifacts/02_augmentation_showcase.png" alt="Augmentation">
+        </div>
+        <div class="card">
+            <h3>Dataset Statistics</h3>
+            <img src="data_artifacts/04_map_complexity.png" alt="Map complexity">
+        </div>
+    </div>
+    <div class="card">
+        <div class="metric-row">
+            <div class="metric"><div class="value">35,126</div><div class="label">Floor Plans</div></div>
+            <div class="metric"><div class="value">2.66M</div><div class="label">Training Pairs</div></div>
+            <div class="metric"><div class="value">17,516</div><div class="label">Validation Pairs</div></div>
+            <div class="metric"><div class="value">256x256</div><div class="label">Resolution</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- PHASE 3: Architecture -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">3</div>
+        <div class="phase-title">Model Architecture</div>
+        <div class="phase-date">May 23</div>
+    </div>
+    <div class="card">
+        <h3>Conditional U-Net + DDPM</h3>
+        <img src="presentation/02_pipeline_diagram.png" alt="Pipeline diagram">
+        <p>The model is a conditional U-Net (4.16M parameters) trained with DDPM (Denoising Diffusion Probabilistic Models). At inference, we use DDIM sampling for 20x faster generation.</p>
+        <table class="summary-table">
+            <tr><th>Component</th><th>Detail</th></tr>
+            <tr><td>Architecture</td><td>Conditional U-Net with sinusoidal time embeddings</td></tr>
+            <tr><td>Parameters</td><td>4,162,849 (~4.2M)</td></tr>
+            <tr><td>Input</td><td>3 channels: noisy target + partial map + known mask (256x256)</td></tr>
+            <tr><td>Output</td><td>1 channel: predicted noise (256x256)</td></tr>
+            <tr><td>Diffusion steps</td><td>T=1000 (training), 50 DDIM steps (inference)</td></tr>
+            <tr><td>Attention</td><td>Self-attention at bottleneck only (16x16)</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- PHASE 4: Training -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">4</div>
+        <div class="phase-title">Training</div>
+        <div class="phase-date">May 23-24</div>
+    </div>
+    <div class="card">
+        <h3>29 Epochs on AWS Tesla T4</h3>
+        <img src="presentation/01_loss_iou_plot.png" alt="Loss and IoU">
+        <p>Trained on a g4dn.xlarge instance (Tesla T4, 15GB VRAM). Loss converged from 0.033 to 0.0007 in ~10 hours.</p>
+        <div class="metric-row">
+            <div class="metric"><div class="value">0.0007</div><div class="label">Final Loss</div></div>
+            <div class="metric"><div class="value">29</div><div class="label">Epochs</div></div>
+            <div class="metric"><div class="value">~10h</div><div class="label">Training Time</div></div>
+            <div class="metric"><div class="value">$5.30</div><div class="label">Total Cost</div></div>
+        </div>
+    </div>
+    <div class="card">
+        <h3>Training Progression</h3>
+        <p>Watch predictions improve from noise (epoch 5) to sharp maps (epoch 25):</p>
+        <img src="showcase/06_training_progression.png" alt="Training progression">
+    </div>
+</div>
+
+<!-- PHASE 5: Results -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">5</div>
+        <div class="phase-title">Results</div>
+        <div class="phase-date">May 24</div>
+    </div>
+    <div class="card highlight">
+        <h3>Evaluation: 82% Accuracy, 0.621 IoU (single scan) → 0.875 IoU (8 scans)</h3>
+        <img src="presentation/04_results_poster.png" alt="Results poster">
+    </div>
+
+    <div class="card">
+        <h3>The Denoising Process</h3>
+        <p>Watch noise transform into a predicted map in 50 DDIM steps:</p>
+        <div class="gif-container">
+            <img src="showcase/02_denoising_process.gif" alt="Denoising GIF">
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Key Finding: More Coverage = Dramatically Better Predictions</h3>
+        <img src="coverage_analysis/coverage_comparison_bar.png" alt="Coverage bar chart">
+        <p>The model was trained on single scans (~10% coverage) but generalizes to multi-scan input. With 8 scans (~55% coverage, realistic for a robot mid-exploration), IoU jumps to <strong>0.875</strong>.</p>
+    </div>
+
+    <div class="card">
+        <h3>Low vs High Coverage: Same Model, Better Input</h3>
+        <img src="high_coverage_showcase/05_low_vs_high.png" alt="Low vs high coverage">
+        <p>Two maps achieve <strong>perfect IoU (1.00)</strong> with just 5 scans of input.</p>
+    </div>
+
+    <div class="card">
+        <h3>Sample Diversity: 8 Different Completions</h3>
+        <img src="showcase/03_sample_diversity.png" alt="Diversity">
+        <p>Each column is a different random sample from the same model. The model produces diverse but plausible layouts, which is essential for uncertainty-based frontier scoring.</p>
+    </div>
+
+    <div class="card">
+        <h3>Uncertainty Maps</h3>
+        <img src="coverage_artifacts/05_confidence.png" alt="Uncertainty">
+        <p>Bright regions = high disagreement across samples. Uncertainty shrinks as the robot explores more. These uncertain regions are exactly where frontier exploration adds the most value.</p>
+    </div>
+
+    <div class="card">
+        <h3>Best vs Worst Predictions</h3>
+        <img src="showcase/05_best_worst.png" alt="Best vs worst">
+        <p>Top 5: IoU 0.82-0.94 (simple layouts, good coverage). Bottom 5: IoU 0.25-0.39 (complex layouts, very low coverage). The model excels on simpler structures and struggles with multi-room mazes seen from a single position.</p>
+    </div>
+</div>
+
+<!-- PHASE 6: Integration -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">6</div>
+        <div class="phase-title">Frontier Scoring + Exploration</div>
+        <div class="phase-date">May 24</div>
+    </div>
+    <div class="card">
+        <h3>How Frontier Scoring Works</h3>
+        <img src="presentation/03_frontier_scoring.png" alt="Frontier scoring">
+        <div class="code-block">
+score(frontier) = E[info_gain] + λ · Std[info_gain] - β · distance
+
+where:
+  E[info_gain]   = average predicted free cells across K=8 completions
+  Std[info_gain] = uncertainty bonus (explore where model disagrees)
+  distance       = cost to reach this frontier
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Diffusion vs Baseline: +24.5% Information Gain</h3>
+        <img src="comparison/comparison_grid.png" alt="Comparison grid">
+        <p>Orange = baseline choice, Green = diffusion choice. The diffusion scorer consistently picks frontiers with more actual free space behind them.</p>
+        <div class="metric-row">
+            <div class="metric"><div class="value">+24.5%</div><div class="label">Info Gain Improvement</div></div>
+            <div class="metric"><div class="value">3/10</div><div class="label">Diffusion Wins</div></div>
+            <div class="metric"><div class="value">0/10</div><div class="label">Baseline Wins</div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Full Exploration Simulation</h3>
+        <p>Robot explores a 6-room floor plan using diffusion-guided frontier selection:</p>
+        <div class="gif-container">
+            <img src="exploration_demo/exploration_diffusion.gif" alt="Exploration GIF">
+        </div>
+        <p>91% coverage in 11 steps. Prediction IoU climbs from 0.72 to <strong>0.97</strong> as the robot explores.</p>
+    </div>
+
+    <div class="card">
+        <h3>The Exploration Story</h3>
+        <img src="coverage_artifacts/06_exploration_story.png" alt="Exploration story">
+        <p>From first scan to near-complete map. The model's predictions (middle row) increasingly match ground truth as more of the map is revealed.</p>
+    </div>
+</div>
+
+<!-- PHASE 7: Architecture -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">7</div>
+        <div class="phase-title">System Architecture</div>
+    </div>
+    <div class="card">
+        <h3>How It All Connects</h3>
+        <div class="code-block">
+┌─────────────────────────────────────────┐
+│  PA4 Mapper (from class)                │  Builds partial map from lidar
+│  Subscribes: /base_scan                 │
+│  Publishes:  /map                       │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│  Diffusion Frontier Scorer (this project)│  Predicts complete maps
+│  Subscribes: /map                       │  Scores frontiers
+│  Publishes:  /best_frontier             │  K=8 completions
+│              /predicted_map             │
+│              /scored_frontiers          │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│  PA3 Planner (from class)               │  Drives to chosen frontier
+│  Subscribes: /best_frontier             │  A* + pure-pursuit
+│  Publishes:  /cmd_vel                   │
+└─────────────────────────────────────────┘
+        </div>
+        <p>The diffusion model sits between the PA4 mapper and PA3 planner, replacing the standard "biggest unknown patch" heuristic with a learned structural prior.</p>
+    </div>
+</div>
+
+<!-- Status -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">✓</div>
+        <div class="phase-title">Project Status</div>
+    </div>
+    <div class="card">
+        <table class="summary-table">
+            <tr><th>Deliverable</th><th>Status</th><th>Details</th></tr>
+            <tr><td>Data pipeline</td><td><span class="status-badge status-done">DONE</span></td><td>2.66M training pairs from HouseExpo</td></tr>
+            <tr><td>Model training</td><td><span class="status-badge status-done">DONE</span></td><td>29 epochs, loss 0.0007, IoU 0.62-0.88</td></tr>
+            <tr><td>Evaluation</td><td><span class="status-badge status-done">DONE</span></td><td>100 test samples, K=8, 82% accuracy</td></tr>
+            <tr><td>Frontier scorer</td><td><span class="status-badge status-done">DONE</span></td><td>+24.5% info gain vs baseline</td></tr>
+            <tr><td>Exploration sim</td><td><span class="status-badge status-done">DONE</span></td><td>Full loop with coverage tracking</td></tr>
+            <tr><td>ROS 2 nodes</td><td><span class="status-badge status-done">DONE</span></td><td>3 nodes + launch script</td></tr>
+            <tr><td>Visual artifacts</td><td><span class="status-badge status-done">DONE</span></td><td>50+ images, GIFs, charts</td></tr>
+            <tr><td>Stage demo</td><td><span class="status-badge status-partial">PARTIAL</span></td><td>Offline sim works; live Stage blocked by Docker CPU perf</td></tr>
+            <tr><td>IEEE report</td><td><span class="status-badge status-todo">TODO</span></td><td>4-page paper</td></tr>
+            <tr><td>Presentation</td><td><span class="status-badge status-todo">TODO</span></td><td>6-min slides</td></tr>
+            <tr><td>Demo video</td><td><span class="status-badge status-todo">TODO</span></td><td>3-min teaser</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- References -->
+<div class="phase">
+    <div class="phase-header">
+        <div class="phase-num">📚</div>
+        <div class="phase-title">References</div>
+    </div>
+    <div class="card">
+        <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 8px;">Ho et al. "Denoising Diffusion Probabilistic Models" (NeurIPS 2020)</li>
+            <li style="margin-bottom: 8px;">Song et al. "Denoising Diffusion Implicit Models" (ICLR 2021)</li>
+            <li style="margin-bottom: 8px;">Li et al. "HouseExpo: A Large-scale 2D Indoor Layout Dataset" (IROS 2020)</li>
+            <li style="margin-bottom: 8px;">Shrestha et al. "Learned Map Prediction for Enhanced Mobile Robot Exploration" (ICRA 2019)</li>
+            <li style="margin-bottom: 8px;">Lin et al. "Online Diffusion-Based 3D Occupancy Prediction at the Frontier" (arXiv 2024)</li>
+        </ul>
+    </div>
+</div>
+
+</div>
+
+<div class="footer">
+    <p>Diffusion-Based Map Completion for Frontier Exploration</p>
+    <p>COSC 81/281 &mdash; Moin Mattar &mdash; Dartmouth College &mdash; Spring 2026</p>
+    <p style="margin-top: 10px; font-size: 0.85em;">
+        <a href="https://github.com/mo-root/Robots_diffusion_planner" style="color: #64b5f6;">GitHub Repository</a>
+    </p>
+</div>
+
+</body>
+</html>
