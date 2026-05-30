@@ -1,6 +1,7 @@
 \documentclass[conference]{IEEEtran}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{subcaption}
@@ -180,9 +181,29 @@ The uncertainty signal from sample diversity proves valuable for exploration. Ar
 
 \textbf{Future work.} Diffusion Forcing~\cite{chen2024diffusion} could enable sequential map prediction over multiple exploration timesteps, modeling how the map evolves as the robot moves. Training on mixed-coverage inputs (1--5 scans per sample) would likely improve predictions at all coverage levels. Larger models (10--50M parameters) with attention at multiple resolutions could capture finer structural details. Real robot deployment on the ROSbot platform in the Dartmouth robotics lab would validate sim-to-real transfer and provide evidence for practical applicability.
 
+\section{Ethics}
+
+Learned map completion raises a genuine dual-use dilemma. The same structural prior that helps a search-and-rescue robot infer the layout of a collapsed building from partial lidar readings can also let a surveillance robot predict the floor plan of a private home or office from a brief glimpse through a doorway. Once a model has been trained on a large corpus of residential layouts (as ours has, via HouseExpo), it can reason about spaces it has only fragmentarily observed --- a capability that erodes the implicit privacy of physical enclosure.
+
+\textit{In favor.} The technology has clear humanitarian value. Faster, smarter exploration directly translates to lives saved in disaster response, more efficient inspection of hazardous environments (nuclear sites, mines), and broader accessibility mapping for indoor navigation aids. Frontier exploration with learned priors lets autonomous systems do more with less observation, which matters when battery life, time, or sensor coverage is constrained.
+
+\textit{Against.} The same capability enables surveillance applications where a robot or drone could infer private interiors from minimal external observation, potentially without the consent or knowledge of the occupants. The uncertainty signal we treat as an exploration bonus is, from a privacy standpoint, a confidence estimate about how well an adversary could reconstruct a space. Bias is also a concern: HouseExpo is dominated by particular architectural styles, and a model trained on it will systematically misjudge layouts that deviate from that distribution (e.g., non-Western homes, industrial spaces, informal settlements).
+
+\textit{Mitigation.} (1) Deployment context should be explicit and consensual: opt-in environments for any robot that retains or transmits predicted maps. (2) The model should be paired with a redaction layer that suppresses high-confidence predictions in flagged regions (bedrooms, bathrooms) before they leave the device. (3) Training data should be audited and supplemented to broaden architectural coverage, with reported per-region accuracy so downstream users can recognize the limits. (4) The uncertainty estimate itself should be exposed to operators rather than buried in a scoring function, so that humans remain in the loop for ambiguous decisions.
+
 \section{Conclusion}
 
 We demonstrated that conditional diffusion models can effectively predict occupancy grid completions for frontier-based exploration. Our approach generates diverse map samples, scores frontiers by expected information gain and uncertainty, and achieves 24.5\% higher information gain compared to heuristic baselines. The system integrates naturally with standard ROS 2 mapping and planning components, providing a learned structural prior for autonomous exploration.
+
+\section*{Acknowledgments}
+
+This project was carried out individually. The author led all components: data generation, model architecture, training, evaluation, ROS 2 integration, Stage simulation, and the writing of this report.
+
+The author thanks Prof. Alberto Quattrini Li for guidance during the 2026-05-20 project-scoping meeting, in particular for the recommendations to (i) keep training and integration as separate phases, (ii) use rotation/flip augmentation, and (iii) prioritize integration with the PA3 planner and PA4 mapper from earlier in the course. Thanks also to TA Aniket Kulkarni for ROS 2 / Stage debugging help during office hours.
+
+Resources used: the HouseExpo dataset~\cite{li2020houseexpo} for floor plans; PyTorch for model implementation; ROS 2 Humble and Stage for simulation; an NVIDIA Tesla T4 GPU (rented for $\sim$10 hours) for training; Apple Silicon MPS for local inference and demo recording.
+
+Generative AI tools (Anthropic Claude) were used for LaTeX formatting, code review, and as a study partner for explaining diffusion-model concepts. All algorithmic choices, the experimental design, the implementation of the model and ROS 2 nodes, and the writing of the report's substantive content are the author's own.
 
 \bibliographystyle{IEEEtran}
 \begin{thebibliography}{9}
