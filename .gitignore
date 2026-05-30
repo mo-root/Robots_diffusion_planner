@@ -27,3 +27,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Intermediate video frames (rebuildable; MP4/GIF outputs are committed)
+results/stage_demo/vnc_frames/
+results/video_frames/
+
+# LaTeX build artifacts
+docs/*.aux
+docs/*.out
+docs/*.fls
+docs/*.fdb_latexmk
+docs/*.synctex.gz
