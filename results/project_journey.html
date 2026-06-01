@@ -3,445 +3,847 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Diffusion Map Completion - Project Journey</title>
+<title>Diffusion-Guided Frontier Exploration  ·  Project Journey</title>
+
+<script>
+  MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
 <style>
 :root {
-  --bg: #0d1117; --surface: #161b22; --surface2: #1c2333;
-  --border: #30363d; --text: #e6edf3; --text2: #8b949e;
-  --accent1: #58a6ff; --accent2: #3fb950; --accent3: #d2a8ff;
-  --accent4: #f78166; --accent5: #ff7b72; --neon: #00ff9d;
-  --glow: 0 0 20px rgba(0,255,157,0.15);
+  /* white + green palette mirroring the billiards deck */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface2: #f4f7f3;
+  --border: #d9e2db;
+  --ink: #1a1a1a;
+  --ink2: #4a5057;
+  --dim: #6b7280;
+  --green: #1f6b47;
+  --green2: #2d8a5c;
+  --green-soft: #e8f3ec;
+  --orange: #d97706;
+  --blue: #2563eb;
+  --yellow: #d4a017;
+  --red: #b91c1c;
 }
-[data-theme="light"] {
-  --bg: #f6f8fa; --surface: #ffffff; --surface2: #f0f2f5;
-  --border: #d0d7de; --text: #1f2328; --text2: #656d76;
-  --accent1: #0969da; --accent2: #1a7f37; --accent3: #8250df;
-  --accent4: #bc4c00; --accent5: #cf222e; --neon: #1a7f37;
-  --glow: 0 0 20px rgba(26,127,55,0.1);
-}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; transition: all 0.3s; }
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Calibri", "Segoe UI", sans-serif;
+  line-height: 1.65;
+  font-size: 16px;
+}
 
-.theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 100; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 0.9em; transition: all 0.3s; }
-.theme-toggle:hover { border-color: var(--neon); box-shadow: var(--glow); }
+a { color: var(--green); text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-.hero { background: linear-gradient(135deg, #0d1117 0%, #1a1040 40%, #0d2137 100%); padding: 100px 40px 80px; text-align: center; position: relative; overflow: hidden; }
-[data-theme="light"] .hero { background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 40%, #f0f7ff 100%); }
-.hero::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 30% 50%, rgba(88,166,255,0.08) 0%, transparent 60%), radial-gradient(circle at 70% 50%, rgba(0,255,157,0.05) 0%, transparent 60%); }
-.hero h1 { font-size: 3.2em; background: linear-gradient(135deg, var(--accent1), var(--neon)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; position: relative; }
-.hero h2 { font-size: 1.4em; color: var(--text2); font-weight: 300; position: relative; }
-.hero .meta { color: var(--text2); margin-top: 20px; font-size: 0.95em; position: relative; }
+/* Hero */
+.hero {
+  padding: 96px 40px 72px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface2) 0%, var(--bg) 100%);
+}
+.hero .inner { max-width: 1180px; margin: 0 auto; }
+.hero .eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+.hero h1 {
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.hero h1 .accent { color: var(--green); }
+.hero .underbar {
+  height: 5px;
+  width: 96px;
+  background: var(--green);
+  margin: 22px 0;
+}
+.hero .subtitle {
+  font-size: 22px;
+  color: var(--dim);
+  font-style: italic;
+  margin-bottom: 22px;
+  max-width: 850px;
+  line-height: 1.4;
+}
+.hero .meta {
+  color: var(--ink2);
+  font-size: 15px;
+}
+.hero .meta strong { color: var(--ink); }
 
-.nav { position: sticky; top: 0; z-index: 50; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; overflow-x: auto; white-space: nowrap; backdrop-filter: blur(10px); }
-.nav a { display: inline-block; padding: 12px 18px; color: var(--text2); text-decoration: none; font-size: 0.85em; font-weight: 500; transition: all 0.2s; border-bottom: 2px solid transparent; }
-.nav a:hover, .nav a.active { color: var(--neon); border-bottom-color: var(--neon); }
+/* Nav */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  overflow-x: auto;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+.nav .inner { max-width: 1180px; margin: 0 auto; }
+.nav a {
+  display: inline-block;
+  padding: 14px 16px;
+  color: var(--ink2);
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav a:hover, .nav a.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+  text-decoration: none;
+}
 
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+/* Layout */
+.container { max-width: 1180px; margin: 0 auto; padding: 24px; }
 
-.section { margin: 60px 0; scroll-margin-top: 60px; }
-.section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 30px; }
-.section-num { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.3em; color: #fff; flex-shrink: 0; }
-.section-num.s1 { background: linear-gradient(135deg, #58a6ff, #388bfd); }
-.section-num.s2 { background: linear-gradient(135deg, #3fb950, #238636); }
-.section-num.s3 { background: linear-gradient(135deg, #d2a8ff, #8b5cf6); }
-.section-num.s4 { background: linear-gradient(135deg, #f78166, #da3633); }
-.section-num.s5 { background: linear-gradient(135deg, #00ff9d, #0ea5e9); }
-.section-num.s6 { background: linear-gradient(135deg, #fbbf24, #f97316); }
-.section-num.s7 { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
-.section-title { font-size: 1.8em; }
-.section-date { color: var(--text2); margin-left: auto; font-size: 0.9em; background: var(--surface2); padding: 4px 12px; border-radius: 12px; }
+.section { margin: 80px 0; scroll-margin-top: 72px; }
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 36px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 18px;
+}
+.section-num {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: var(--green);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.5px;
+}
+.section-sub {
+  margin-left: auto;
+  color: var(--dim);
+  font-style: italic;
+  font-size: 14px;
+  max-width: 420px;
+  text-align: right;
+}
 
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; transition: all 0.3s; }
-.card:hover { border-color: var(--accent1); box-shadow: 0 0 30px rgba(88,166,255,0.06); transform: translateY(-1px); }
-.card h3 { color: var(--accent2); margin-bottom: 12px; font-size: 1.2em; }
-.card p { color: var(--text2); margin-bottom: 14px; }
-.card img, .card .gif-img { width: 100%; border-radius: 10px; margin: 12px 0; border: 1px solid var(--border); }
+/* Card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 22px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.card:hover { border-color: var(--green); }
+.card h3 {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.card h3 .accent { color: var(--green); }
+.card p {
+  color: var(--ink2);
+  margin-bottom: 14px;
+  font-size: 16px;
+}
+.card p:last-child { margin-bottom: 0; }
+.card img {
+  width: 100%;
+  border-radius: 8px;
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  display: block;
+}
+.card .caption {
+  font-size: 13px;
+  color: var(--dim);
+  font-style: italic;
+  text-align: center;
+  margin-top: 8px;
+}
 
-.gif-showcase { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
-.gif-item { background: var(--surface2); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); transition: all 0.3s; }
-.gif-item:hover { border-color: var(--neon); box-shadow: var(--glow); transform: scale(1.01); }
-.gif-item img { width: 100%; display: block; }
-.gif-item .gif-label { padding: 10px 14px; font-size: 0.85em; color: var(--text2); text-align: center; }
+/* Boxed callout (hypothesis style) */
+.callout {
+  border-left: 6px solid var(--green);
+  background: var(--green-soft);
+  padding: 22px 28px;
+  border-radius: 0 10px 10px 0;
+  margin: 16px 0;
+}
+.callout .lbl {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.callout .body {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.callout .body strong { color: var(--green); }
 
-.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 20px 0; }
-.metric-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; transition: all 0.3s; }
-.metric-card:hover { border-color: var(--neon); box-shadow: var(--glow); }
-.metric-card .val { font-size: 2em; font-weight: 800; background: linear-gradient(135deg, var(--accent1), var(--neon)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.metric-card .lbl { color: var(--text2); font-size: 0.8em; margin-top: 4px; }
+.callout.warn { border-color: var(--red); background: #fdf2f2; }
+.callout.warn .lbl { color: var(--red); }
+.callout.warn .body strong { color: var(--red); }
 
+/* Inline horizontal flow diagram */
+.flow {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin: 8px 0;
+  flex-wrap: nowrap;
+}
+.flow .step {
+  flex: 1;
+  background: var(--surface2);
+  border-radius: 12px;
+  padding: 22px 14px;
+  text-align: center;
+  border-top: 5px solid var(--green);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+.flow .step.green { border-top-color: var(--green); }
+.flow .step.orange { border-top-color: var(--orange); }
+.flow .step.yellow { border-top-color: var(--yellow); }
+.flow .step.blue { border-top-color: var(--blue); }
+.flow .step .step-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.flow .step.orange .step-num { color: var(--orange); }
+.flow .step.yellow .step-num { color: var(--yellow); }
+.flow .step.blue .step-num { color: var(--blue); }
+.flow .step .step-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 10px;
+  line-height: 1.25;
+}
+.flow .step .step-desc {
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 8px;
+  line-height: 1.45;
+}
+.flow .arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--dim);
+  padding: 0 6px;
+  font-weight: 300;
+  flex-shrink: 0;
+}
+.flow-caption {
+  text-align: center;
+  font-size: 13px;
+  color: var(--dim);
+  font-style: italic;
+  margin-top: 14px;
+}
+
+/* Pipeline 4-card grid */
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin: 24px 0;
+}
+.pipe {
+  background: var(--surface2);
+  border-radius: 14px;
+  padding: 24px 22px;
+  border-top: 6px solid var(--green);
+  display: flex;
+  flex-direction: column;
+}
+.pipe.green { border-top-color: var(--green); }
+.pipe.orange { border-top-color: var(--orange); }
+.pipe.yellow { border-top-color: var(--yellow); }
+.pipe.blue { border-top-color: var(--blue); }
+.pipe .num {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1;
+}
+.pipe.green .num { color: var(--green); }
+.pipe.orange .num { color: var(--orange); }
+.pipe.yellow .num { color: var(--yellow); }
+.pipe.blue .num { color: var(--blue); }
+.pipe .name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 10px;
+  color: var(--ink);
+}
+.pipe .desc {
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: 1.55;
+  margin-top: 12px;
+  flex: 1;
+}
+@media (max-width: 900px) { .pipeline { grid-template-columns: 1fr 1fr; } }
+
+/* Stat cards */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.metric {
+  background: var(--surface2);
+  border-left: 4px solid var(--green);
+  border-radius: 0 10px 10px 0;
+  padding: 18px 20px;
+}
+.metric .val {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--green);
+  line-height: 1;
+}
+.metric .lbl {
+  color: var(--dim);
+  font-size: 11px;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.35;
+}
+.metric.warn { border-left-color: var(--red); }
+.metric.warn .val { color: var(--red); }
+.metric.blue { border-left-color: var(--blue); }
+.metric.blue .val { color: var(--blue); }
+.metric.orange { border-left-color: var(--orange); }
+.metric.orange .val { color: var(--orange); }
+
+/* Grids */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-@media (max-width: 800px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
 
-.code { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82em; color: var(--accent1); overflow-x: auto; margin: 12px 0; white-space: pre; line-height: 1.5; }
+/* GIF showcase tile */
+.gif-tile {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.gif-tile img { width: 100%; display: block; }
+.gif-tile .label {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink2);
+  text-align: center;
+  font-weight: 600;
+}
 
-.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75em; font-weight: 600; }
-.badge-done { background: rgba(63,185,80,0.15); color: var(--accent2); border: 1px solid rgba(63,185,80,0.3); }
-.badge-wip { background: rgba(247,129,102,0.15); color: var(--accent4); border: 1px solid rgba(247,129,102,0.3); }
-.badge-todo { background: rgba(139,148,158,0.15); color: var(--text2); border: 1px solid rgba(139,148,158,0.3); }
+/* Math block */
+.math-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px 28px;
+  margin: 14px 0;
+  text-align: center;
+  font-size: 18px;
+}
+.math-block .legend {
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 12px;
+  font-style: italic;
+}
 
-table.nice { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 10px; overflow: hidden; margin: 14px 0; }
-table.nice th { background: linear-gradient(135deg, var(--accent1), #388bfd); color: #fff; padding: 12px 16px; text-align: left; font-size: 0.9em; }
-table.nice td { padding: 11px 16px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
-table.nice tr:last-child td { border-bottom: none; }
-table.nice tr:hover td { background: var(--surface2); }
+/* Table */
+table.t {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+table.t th {
+  background: var(--green);
+  color: white;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+}
+table.t td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--ink2);
+}
+table.t tr:last-child td { border-bottom: none; }
+table.t tr:hover td { background: var(--surface2); }
+table.t td strong { color: var(--ink); }
+table.t td .pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+}
+table.t td .pill.good { background: var(--green-soft); color: var(--green); }
+table.t td .pill.bad { background: #fdf2f2; color: var(--red); }
 
-.comparison-slider { position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--border); margin: 16px 0; cursor: pointer; }
-.comparison-slider img { width: 100%; display: block; }
-.comparison-slider .overlay { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 4px 12px; border-radius: 8px; font-size: 0.8em; }
+/* Code */
+.code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-x: auto;
+  margin: 12px 0;
+  white-space: pre;
+  line-height: 1.6;
+}
 
-.tab-container { margin: 16px 0; }
-.tab-buttons { display: flex; gap: 4px; margin-bottom: 12px; }
-.tab-btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; font-size: 0.85em; transition: all 0.2s; }
-.tab-btn.active { background: var(--accent1); color: #fff; border-color: var(--accent1); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 60px 24px 80px;
+  color: var(--dim);
+  border-top: 1px solid var(--border);
+  margin-top: 80px;
+  font-size: 14px;
+}
+.footer p { margin-bottom: 6px; }
+.footer a { color: var(--green); font-weight: 600; }
 
-.progress-bar { width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin: 8px 0; }
-.progress-bar .fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+/* Section number colors per section */
+.section-num.s1 { background: var(--green); }
+.section-num.s2 { background: var(--orange); }
+.section-num.s3 { background: var(--yellow); }
+.section-num.s4 { background: var(--blue); }
+.section-num.s5 { background: var(--green); }
+.section-num.s6 { background: var(--green2); }
+.section-num.s7 { background: var(--red); }
+.section-num.s8 { background: var(--ink); }
 
-.footer { text-align: center; padding: 50px 20px; color: var(--text2); border-top: 1px solid var(--border); margin-top: 60px; }
-.footer a { color: var(--accent1); text-decoration: none; }
 </style>
 </head>
-<body data-theme="dark">
+<body>
 
-<button class="theme-toggle" onclick="toggleTheme()">🌓 Toggle Theme</button>
-
-<div class="hero">
-    <h1>Diffusion-Based Map Completion</h1>
-    <h2>Teaching Robots to Imagine What's Behind Walls</h2>
-    <p class="meta">COSC 81/281 Final Project &bull; Moin Mattar &bull; Dartmouth College &bull; Spring 2026</p>
-</div>
+<!-- HERO -->
+<header class="hero">
+  <div class="inner">
+    <div class="eyebrow">COSC 81/281  ·  Final Project</div>
+    <h1>Diffusion-Guided<br><span class="accent">Frontier Exploration</span></h1>
+    <div class="underbar"></div>
+    <p class="subtitle">A learned generative prior of building layouts as a robot's exploration signal.</p>
+    <p class="meta"><strong>Moin Mattar</strong>  ·  Dartmouth College</p>
+  </div>
+</header>
 
 <nav class="nav">
-    <a href="#problem">Problem</a>
-    <a href="#data">Data</a>
-    <a href="#model">Model</a>
+  <div class="inner">
+    <a href="#inspiration">Inspiration</a>
+    <a href="#system">System</a>
+    <a href="#math">Math</a>
     <a href="#training">Training</a>
+    <a href="#demos">Demos</a>
     <a href="#results">Results</a>
-    <a href="#exploration">Exploration</a>
-    <a href="#status">Status</a>
+    <a href="#hardships">Hardships</a>
+    <a href="#next">What is next</a>
+  </div>
 </nav>
 
 <div class="container">
 
-<!-- 1. Problem -->
-<div class="section" id="problem">
-    <div class="section-header">
-        <div class="section-num s1">1</div>
-        <div class="section-title">The Problem</div>
-        <div class="section-date">May 20</div>
-    </div>
-    <div class="card">
-        <h3>Blind Exploration is Wasteful</h3>
-        <p>A robot exploring an unknown building picks frontiers (boundaries between known and unknown space) and drives to them. Standard approaches use a simple heuristic: <em>"go to the biggest unknown patch."</em> This ignores the structure of buildings -- walls continue, rooms have shapes, hallways connect.</p>
-        <p><strong>Our approach:</strong> Train a conditional diffusion model that looks at what the robot has seen so far and <em>predicts what the rest of the building looks like</em>. Sample K=8 different predictions. Use the agreement and disagreement between them to score which frontier is most worth visiting.</p>
-    </div>
-    <div class="card">
-        <h3>The Pipeline</h3>
-        <img src="presentation/02_pipeline_diagram.png" alt="Pipeline">
-    </div>
-    <div class="card">
-        <h3>How Frontier Scoring Works</h3>
-        <img src="presentation/03_frontier_scoring.png" alt="Scoring">
-        <div class="code">score(frontier) = E[info_gain]        -- how much free space the model expects
-               + λ · Std[info_gain]   -- bonus for uncertain areas (explore the unknown!)
-               - β · distance         -- prefer closer frontiers</div>
-    </div>
-</div>
+<!-- =============================== 0. INSPIRATION =============================== -->
+<section class="section" id="inspiration">
+  <div class="section-header">
+    <div class="section-num s1" style="background: var(--ink);">0</div>
+    <div class="section-title">Inspiration: World Models</div>
+  </div>
 
-<!-- 2. Data -->
-<div class="section" id="data">
-    <div class="section-header">
-        <div class="section-num s2">2</div>
-        <div class="section-title">Data Pipeline</div>
-        <div class="section-date">May 23</div>
+  <div class="card">
+    <h3>Related work</h3>
+    <table class="t">
+      <tr><th>Work</th><th>What it does</th></tr>
+      <tr><td><strong>World Models</strong> (Ha &amp; Schmidhuber, 2018)</td><td>Agents plan inside learned generative models of their environment.</td></tr>
+      <tr><td><strong>NVIDIA Cosmos</strong> (2025)</td><td>World foundation models for physical AI. 20M hours of robot and driving video.</td></tr>
+      <tr><td><strong>Genie 2</strong> (DeepMind, 2024)</td><td>Generative world model that creates interactive 3D environments from a single image.</td></tr>
+      <tr><td><strong>Decart Oasis</strong> (2024)</td><td>Real time interactive video generation. Playable AI generated worlds, frame by frame.</td></tr>
+      <tr><td><strong>Diffusion Forcing</strong> (Chen, 2024)</td><td>Diffusion sequence prediction with mixed conditioning for coherent long horizon rollouts.</td></tr>
+    </table>
+  </div>
+
+  <div class="callout">
+    <div class="lbl">Hypothesis</div>
+    <div class="body">A learned generative prior helps <em>only when</em> <strong>(1) training distribution matches deployment</strong>, <strong>(2) the step budget is tight</strong>, and <strong>(3) inference is fast enough to drive</strong>.</div>
+  </div>
+</section>
+
+<!-- =============================== 2. SYSTEM =============================== -->
+<section class="section" id="system">
+  <div class="section-header">
+    <div class="section-num s2">2</div>
+    <div class="section-title">Our System</div>
+  </div>
+
+  <div class="card">
+    <div class="flow">
+      <div class="step green">
+        <div class="step-num">Step 1</div>
+        <div class="step-name">Partial map</div>
+        <div class="step-desc">From accumulated lidar scans</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="step orange">
+        <div class="step-num">Step 2</div>
+        <div class="step-name">U-Net (DDIM)</div>
+        <div class="step-desc">Conditional diffusion, 30 steps</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="step yellow">
+        <div class="step-num">Step 3</div>
+        <div class="step-name">K = 8 imagined buildings</div>
+        <div class="step-desc">Plausible completions</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="step blue">
+        <div class="step-num">Step 4</div>
+        <div class="step-name">Score frontiers</div>
+        <div class="step-desc">E[gain] + &lambda;&middot;Std &minus; &beta;&middot;dist</div>
+      </div>
+      <div class="arrow">&rarr;</div>
+      <div class="step green">
+        <div class="step-num">Step 5</div>
+        <div class="step-name">Drive to argmax</div>
+        <div class="step-desc">Move, sense, repeat</div>
+      </div>
     </div>
-    <div class="card">
-        <h3>Lidar Raycasting Simulation</h3>
-        <p>We take real floor plans from HouseExpo, place a virtual robot, and simulate 360-degree lidar to create (partial map, full map) training pairs.</p>
-        <img src="data_artifacts/05_lidar_raycasting.png" alt="Raycasting">
+    <div class="flow-caption">The loop closes after Step 5: the robot drives, gathers a new lidar scan, and the cycle restarts at Step 1.</div>
+  </div>
+
+  <div class="card">
+    <div class="pipeline">
+      <div class="pipe green">
+        <div class="num">01</div>
+        <div class="name">Data</div>
+        <div class="desc">HouseExpo: 35,126 floor plans. 2.66M training pairs after augmentation.</div>
+      </div>
+      <div class="pipe orange">
+        <div class="num">02</div>
+        <div class="name">Model</div>
+        <div class="desc">Conditional U-Net, 4.16M params. DDPM, MSE on noise. 29 epochs on T4.</div>
+      </div>
+      <div class="pipe yellow">
+        <div class="num">03</div>
+        <div class="name">Scoring</div>
+        <div class="desc">K = 8 DDIM completions. Score = E[gain] + λ·Std[gain] − β·dist.</div>
+      </div>
+      <div class="pipe blue">
+        <div class="num">04</div>
+        <div class="name">Integration</div>
+        <div class="desc">ROS 2 node publishes to /best_frontier. Exploration manager drives the robot.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Data</h3>
+    <div class="metrics">
+      <div class="metric"><div class="val">35,126</div><div class="lbl">Floor Plans</div></div>
+      <div class="metric"><div class="val">2.66M</div><div class="lbl">Training Pairs</div></div>
+      <div class="metric"><div class="val">8x</div><div class="lbl">Augmentation</div></div>
+      <div class="metric"><div class="val">256 px</div><div class="lbl">Resolution</div></div>
+    </div>
+    <img src="data_artifacts/01_sample_grid_20.png" alt="20 sample training pairs from HouseExpo">
+    <div class="caption">Per pair: ground truth, partial map (input), hidden remainder (target).</div>
+  </div>
+
+  <div class="card">
+    <h3>Model</h3>
+    <table class="t">
+      <tr><th>Component</th><th>Detail</th></tr>
+      <tr><td>Architecture</td><td>Conditional U-Net, base 32 channels, mults (1, 2, 4, 4), bottleneck attention.</td></tr>
+      <tr><td>Parameters</td><td><strong>4.16M</strong></td></tr>
+      <tr><td>Input</td><td>3 channels: noisy target, partial map, known mask. 256 × 256.</td></tr>
+      <tr><td>Training</td><td>DDPM, T = 1000 timesteps, MSE on the noise.</td></tr>
+      <tr><td>Inference</td><td>DDIM 30 steps, K = 8 batched per call (~2 s on T4).</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- =============================== 3. MATH =============================== -->
+<section class="section" id="math">
+  <div class="section-header">
+    <div class="section-num s3">3</div>
+    <div class="section-title">The Math</div>
+  </div>
+
+  <div class="card">
+    <h3>How diffusion works</h3>
+    <img src="presentation/diffusion_explainer.png" alt="Diffusion model: forward noising and reverse denoising">
+    <div class="caption">Train by gradually corrupting clean data with noise (forward). At inference, start from pure noise and run the model backward to generate a fresh sample (reverse).</div>
+  </div>
+
+  <div class="card">
+    <h3>DDPM forward process</h3>
+    <div class="math-block">
+      $$x_\tau \;=\; \sqrt{\bar\alpha_\tau}\, x_0 \;+\; \sqrt{1 - \bar\alpha_\tau}\, \epsilon, \qquad \epsilon \sim \mathcal{N}(0, I)$$
+      <div class="legend">$\tau = 0$ is the clean floor plan, $\tau = T$ is pure Gaussian noise. $T = 1000$.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Training objective</h3>
+    <div class="math-block">
+      $$\mathcal{L}_{\text{DDPM}} \;=\; \mathbb{E}_{x_0,\, \tau,\, \epsilon} \!\left[\,\bigl\|\hat\epsilon_\theta(x_\tau,\, \tau,\, \text{partial},\, \text{mask}) - \epsilon\bigr\|_2^2 \,\right]$$
+      <div class="legend">MSE on the noise. U-Net conditioned on the partial map and known mask.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Frontier scoring (the new logic)</h3>
+    <p style="color: var(--ink2); font-size: 16px; margin-bottom: 14px;">For each frontier, we average the expected information gain across the 8 imagined buildings, add a bonus when they disagree, subtract distance, and pick the highest score.</p>
+    <div class="math-block">
+      $$\text{score}(f) \;=\; \underbrace{\frac{1}{K}\sum_{k=1}^{K} G_k(f)}_{\text{expected gain}} \;+\; \lambda \cdot \underbrace{\operatorname{Std}_{k}\bigl[\,G_k(f)\,\bigr]}_{\text{UCB bonus}} \;-\; \beta \cdot \underbrace{d(\text{robot},\, f)}_{\text{travel cost}}$$
+      <div class="legend">$G_k(f)$ = unknown cells revealed at $f$ under imagined building $k$. $\lambda = \beta = 0.5$.</div>
+    </div>
+    <img src="presentation/03_frontier_scoring.png" alt="Frontier scoring visualization" style="margin-top: 16px;">
+  </div>
+</section>
+
+<!-- =============================== 4. TRAINING =============================== -->
+<section class="section" id="training">
+  <div class="section-header">
+    <div class="section-num s4">4</div>
+    <div class="section-title">Training</div>
+  </div>
+
+  <div class="card">
+    <h3>Loss convergence</h3>
+    <img src="../docs/fig_loss.png" alt="Training loss and validation IoU curves">
+    <div class="caption">Say: loss dropped two orders of magnitude over 29 epochs on a T4.</div>
+    <div class="metrics">
+      <div class="metric"><div class="val">0.0007</div><div class="lbl">Final Loss</div></div>
+      <div class="metric"><div class="val">29</div><div class="lbl">Epochs</div></div>
+      <div class="metric"><div class="val">~10 h</div><div class="lbl">GPU Time</div></div>
+      <div class="metric"><div class="val">T4</div><div class="lbl">Tesla GPU</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Sample quality across epochs</h3>
+    <img src="showcase/06_training_progression.png" alt="Sample predictions at epochs 5, 10, 15, 20, 25">
+    <div class="caption">Show: epoch 5 is blurry blobs, epoch 20 has crisp walls. I deployed epoch 20.</div>
+  </div>
+
+  <div class="card">
+    <h3>K = 8 imagined buildings, same input</h3>
+    <img src="showcase/03_sample_diversity.png" alt="K equals 8 sample diversity">
+    <div class="caption">Show: same partial input, 8 different completions. Their disagreement is the exploration signal.</div>
+  </div>
+
+  <div class="card">
+    <h3>Denoising: noise to building (30 DDIM steps)</h3>
+    <img src="gifs/diversity_denoise.gif" alt="Four simultaneous completions">
+    <div class="caption">Show: 4 samples starting from pure noise. Each settles into a distinct plausible building.</div>
+  </div>
+</section>
+
+<!-- =============================== 5. DEMOS =============================== -->
+<section class="section" id="demos">
+  <div class="section-header">
+    <div class="section-num s5">5</div>
+    <div class="section-title">Demos: The Loop Running</div>
+  </div>
+
+  <div class="card">
+    <h3>The headline animation</h3>
+    <img src="exploration_demo/exploration_diffusion.gif" alt="Diffusion-guided exploration loop">
+    <div class="caption">Point at the middle panel: model's prediction sharpens as the robot scans. Coverage climbs to 91% in 11 steps.</div>
+  </div>
+
+  <div class="card">
+    <h3>Diffusion vs baseline, same map</h3>
+    <img src="analysis/figures/17_side_by_side_demo.gif" alt="Diffusion stacked over baseline">
+    <div class="caption">Top row uses imagination. Bottom row does not. Watch the top reach high coverage first.</div>
+  </div>
+
+  <div class="card">
+    <h3>Four frontier scorers, synchronized (map 2638)</h3>
+    <img src="analysis/figures/16_4method_sync.gif" alt="Four-method synchronized comparison">
+    <div class="caption">Compare the coverage tickers. Nearest crawls. Diffusion (bottom right) reaches 95% first.</div>
+  </div>
+
+  <div class="card">
+    <h3>Behind the mind</h3>
+    <img src="analysis/figures/15_behind_mind_map2638.png" alt="Behind-the-mind composite for map 2638">
+    <div class="caption">Three rows: world, robot's view, model's imagination. By step 4 the imagination matches reality.</div>
+  </div>
+
+  <div class="card">
+    <h3>Stage simulator (ROS 2 pipeline)</h3>
+    <img src="stage_demo/maze_exploration.gif" alt="Stage maze exploration with diffusion guidance">
+    <div class="caption">Show: the diffusion scorer driving a real ROS 2 robot in the PA3 maze world.</div>
+  </div>
+</section>
+
+<!-- =============================== 6. RESULTS =============================== -->
+<section class="section" id="results">
+  <div class="section-header">
+    <div class="section-num s6">6</div>
+    <div class="section-title">Results</div>
+  </div>
+
+  <div class="card">
+    <h3>Four scorers, 30 maps, same seeds</h3>
+    <img src="analysis/figures/12_4baseline_curves.png" alt="4-baseline coverage curves">
+    <div class="caption" style="text-align: left; max-width: 900px; margin: 12px auto 0;">
+      <strong>What we are seeing:</strong> X-axis is the frontier decision step. Y-axis is mean coverage across the 30 maps. Each curve is one scorer. Shaded bands are standard error. The dashed vertical line at step 4 marks the early-budget regime.<br>
+      <strong>The story:</strong> diffusion (pink) leads in steps 1 to 7. Nearest (grey) lags from the start. The two info-gain variants are essentially identical, which means the distance term is decorative. After step 10 the curves converge.
     </div>
     <div class="metrics">
-        <div class="metric-card"><div class="val">35,126</div><div class="lbl">Floor Plans</div></div>
-        <div class="metric-card"><div class="val">2.66M</div><div class="lbl">Training Pairs</div></div>
-        <div class="metric-card"><div class="val">8x</div><div class="lbl">Augmentation</div></div>
-        <div class="metric-card"><div class="val">256px</div><div class="lbl">Resolution</div></div>
+      <div class="metric"><div class="val">+3.5pp</div><div class="lbl">Diffusion vs heuristic</div></div>
+      <div class="metric blue"><div class="val">+17.5pp</div><div class="lbl">Info-gain vs nearest</div></div>
+      <div class="metric orange"><div class="val">~0pp</div><div class="lbl">Distance term</div></div>
     </div>
-    <div class="grid-2">
-        <div class="card">
-            <h3>Sample Training Pairs</h3>
-            <img src="data_artifacts/01_sample_grid_20.png" alt="Samples">
-        </div>
-        <div class="card">
-            <h3>Data Augmentation (8 variants)</h3>
-            <img src="data_artifacts/02_augmentation_showcase.png" alt="Augmentation">
-        </div>
-    </div>
-    <div class="grid-2">
-        <div class="card">
-            <h3>Coverage Distribution</h3>
-            <img src="data_artifacts/03_visibility_histogram.png" alt="Histogram">
-        </div>
-        <div class="card">
-            <h3>Dataset Complexity</h3>
-            <img src="data_artifacts/04_map_complexity.png" alt="Complexity">
-        </div>
-    </div>
-</div>
+  </div>
 
-<!-- 3. Model -->
-<div class="section" id="model">
-    <div class="section-header">
-        <div class="section-num s3">3</div>
-        <div class="section-title">Model Architecture</div>
+  <div class="card">
+    <h3>Out-of-domain ablation</h3>
+    <img src="analysis/figures/07_in_vs_ood_delta.png" alt="In-domain vs OOD delta">
+    <div class="caption" style="text-align: left; max-width: 900px; margin: 12px auto 0;">
+      <strong>What we are seeing:</strong> the delta between diffusion and the heuristic baseline at each step. One curve is our in-domain model (trained on HouseExpo, tested on HouseExpo). The other is a second U-Net trained from scratch on synthetic warehouses, tested on the same HouseExpo maps. Wrong-domain prior, same evaluation.<br>
+      <strong>The story:</strong> the in-domain curve bumps up by about +3.5pp around step 4. The OOD curve hovers around zero. With a mismatched prior, the advantage vanishes. This proves the prior is doing real structural work, not averaging.
     </div>
-    <div class="card">
-        <h3>Conditional U-Net + DDPM</h3>
-        <table class="nice">
-            <tr><th>Component</th><th>Detail</th></tr>
-            <tr><td>Architecture</td><td>Conditional U-Net (encoder-decoder with skip connections)</td></tr>
-            <tr><td>Parameters</td><td>4,162,849 (~4.2M)</td></tr>
-            <tr><td>Input</td><td>3ch: noisy target + partial map + known mask (256x256)</td></tr>
-            <tr><td>Output</td><td>1ch: predicted noise (256x256)</td></tr>
-            <tr><td>Training</td><td>DDPM, T=1000 diffusion steps, MSE noise prediction</td></tr>
-            <tr><td>Inference</td><td>DDIM, 50 steps (20x faster than full DDPM)</td></tr>
-            <tr><td>Attention</td><td>Self-attention at bottleneck (16x16) only</td></tr>
-        </table>
-        <p>Why U-Net? Every paper doing occupancy grid prediction uses U-Net. At 4M params, convolutional inductive biases (translation equivariance, locality) outperform transformers which need 100M+ params to shine.</p>
+    <div class="metrics">
+      <div class="metric warn"><div class="val">-0.1pp</div><div class="lbl">Mismatched prior, step 4</div></div>
     </div>
-</div>
+  </div>
 
-<!-- 4. Training -->
-<div class="section" id="training">
-    <div class="section-header">
-        <div class="section-num s4">4</div>
-        <div class="section-title">Training</div>
-        <div class="section-date">May 23-24</div>
+  <div class="card">
+    <h3>Realtime upper bound</h3>
+    <img src="analysis/figures/11_2x2_matrix.png" alt="2 by 2 matrix of prior by sampling mode">
+    <div class="caption" style="text-align: left; max-width: 900px; margin: 12px auto 0;">
+      <strong>What we are seeing:</strong> a 2 by 2 of prior type (in-domain vs OOD warehouse) crossed with sampling mode (discrete = one batch per frontier, realtime = re-sample every 3 driving cells). Y-axis is step-4 coverage delta over the baseline in percentage points.<br>
+      <strong>The story:</strong> in-domain + discrete = +3.5pp (the basic result). In-domain + realtime = +10pp (the upper bound a distilled model could reach). OOD + discrete is the kill at zero. OOD + realtime still claws back +6pp. <strong>Sampling frequency contributes more than prior match.</strong> That is the strongest argument for distillation and hardware deployment.
     </div>
-    <div class="card">
-        <h3>Loss Convergence</h3>
-        <img src="presentation/01_loss_iou_plot.png" alt="Loss">
-        <div class="metrics">
-            <div class="metric-card"><div class="val">0.0007</div><div class="lbl">Final Loss</div></div>
-            <div class="metric-card"><div class="val">29</div><div class="lbl">Epochs</div></div>
-            <div class="metric-card"><div class="val">~10h</div><div class="lbl">GPU Time</div></div>
-            <div class="metric-card"><div class="val">T4</div><div class="lbl">Tesla GPU</div></div>
-        </div>
+    <div class="metrics">
+      <div class="metric"><div class="val">+10.0pp</div><div class="lbl">In-domain, realtime</div></div>
+      <div class="metric blue"><div class="val">~500 ms</div><div class="lbl">DDIM 10, K=4 on T4</div></div>
     </div>
-    <div class="card">
-        <h3>Watch Predictions Improve Over Training</h3>
-        <img src="showcase/06_training_progression.png" alt="Progression">
-        <p>Epoch 5: blurry blobs. Epoch 10: rough shapes. Epoch 20: clean walls and rooms. Epoch 25: sharp predictions.</p>
-    </div>
-    <div class="card">
-        <h3>Milestone Table</h3>
-        <img src="presentation/06_loss_table.png" alt="Table">
-    </div>
-</div>
+  </div>
+</section>
 
-<!-- 5. Results -->
-<div class="section" id="results">
-    <div class="section-header">
-        <div class="section-num s5">5</div>
-        <div class="section-title">Results</div>
-        <div class="section-date">May 24</div>
-    </div>
+<!-- =============================== 7. HARDSHIPS =============================== -->
+<section class="section" id="hardships">
+  <div class="section-header">
+    <div class="section-num s7">7</div>
+    <div class="section-title">Hardships</div>
+  </div>
 
-    <div class="card" style="border-color: var(--neon); box-shadow: var(--glow);">
-        <h3 style="color: var(--neon);">Results Summary</h3>
-        <img src="presentation/04_results_poster.png" alt="Results">
-    </div>
+  <div class="card">
+    <ul style="padding-left: 24px; color: var(--ink2); font-size: 16px;">
+      <li style="margin-bottom: 12px;"><strong>Docker QEMU on Apple Silicon</strong>, 50× too slow for live diffusion in Stage.</li>
+      <li style="margin-bottom: 12px;"><strong>Batched K = 8 sampling</strong>: 3× speedup over sequential calls.</li>
+      <li style="margin-bottom: 12px;"><strong>Asymptotic coverage</strong>: baseline catches up by step 20.</li>
+      <li style="margin-bottom: 12px;"><strong>OOD priors give zero help</strong> (−0.1pp).</li>
+      <li style="margin-bottom: 12px;"><strong>2 / 30 hard failures</strong>: K-sample disagreement could flag these.</li>
+      <li style="margin-bottom: 0;"><strong>Live hardware</strong> blocked by the same latency wall as Stage.</li>
+    </ul>
+  </div>
+</section>
 
-    <div class="card">
-        <h3>🎬 The Denoising Process (GIFs)</h3>
-        <p>Watch random noise transform into a predicted floor plan in 50 DDIM steps:</p>
-        <div class="gif-showcase">
-            <div class="gif-item"><img src="gifs/denoise_01.gif" alt="Denoise 1"><div class="gif-label">Map 1: noise → prediction</div></div>
-            <div class="gif-item"><img src="gifs/denoise_02.gif" alt="Denoise 2"><div class="gif-label">Map 2: noise → prediction</div></div>
-            <div class="gif-item"><img src="gifs/denoise_03.gif" alt="Denoise 3"><div class="gif-label">Map 3: noise → prediction</div></div>
-            <div class="gif-item"><img src="gifs/denoise_04.gif" alt="Denoise 4"><div class="gif-label">Map 4: noise → prediction</div></div>
-        </div>
-    </div>
+<!-- =============================== 8. WHAT IS NEXT =============================== -->
+<section class="section" id="next">
+  <div class="section-header">
+    <div class="section-num s8">8</div>
+    <div class="section-title">What Is Next</div>
+  </div>
 
-    <div class="card">
-        <h3>🎬 High-Coverage Denoising (5 scans input)</h3>
-        <p>With more realistic input (~30% visible), predictions are much sharper:</p>
-        <div class="gif-showcase">
-            <div class="gif-item"><img src="high_coverage_showcase/hc_denoise_01.gif" alt="HC 1"><div class="gif-label">High coverage map 1</div></div>
-            <div class="gif-item"><img src="high_coverage_showcase/hc_denoise_02.gif" alt="HC 2"><div class="gif-label">High coverage map 2</div></div>
-            <div class="gif-item"><img src="high_coverage_showcase/hc_denoise_03.gif" alt="HC 3"><div class="gif-label">High coverage map 3</div></div>
-            <div class="gif-item"><img src="high_coverage_showcase/hc_denoise_04.gif" alt="HC 4"><div class="gif-label">High coverage map 4</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🎬 Accuracy Tracking</h3>
-        <p>Blue = missed free space, Red = false positive walls. Watch errors shrink:</p>
-        <div class="gif-showcase">
-            <div class="gif-item"><img src="gifs/accuracy_01.gif" alt="Acc 1"><div class="gif-label">Accuracy map 1</div></div>
-            <div class="gif-item"><img src="gifs/accuracy_02.gif" alt="Acc 2"><div class="gif-label">Accuracy map 2</div></div>
-            <div class="gif-item"><img src="gifs/accuracy_03.gif" alt="Acc 3"><div class="gif-label">Accuracy map 3</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🎬 Diversity: 4 Completions Denoising Simultaneously</h3>
-        <p>Same partial map, different random seeds. Each produces a different plausible layout:</p>
-        <div class="gif-showcase">
-            <div class="gif-item" style="grid-column: 1 / -1;"><img src="gifs/diversity_denoise.gif" alt="Diversity"><div class="gif-label">4 simultaneous completions from same input</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>Key Finding: More Coverage = Better Predictions</h3>
-        <div class="grid-2">
-            <div><img src="coverage_analysis/coverage_comparison_bar.png" alt="Bar" style="width:100%; border-radius: 10px;"></div>
-            <div><img src="presentation/05_iou_vs_coverage.png" alt="Scatter" style="width:100%; border-radius: 10px;"></div>
-        </div>
-        <p>IoU jumps from <strong>0.63</strong> (1 scan) to <strong>0.88</strong> (8 scans). The model generalizes to multi-scan input despite being trained on single scans.</p>
-    </div>
-
-    <div class="card">
-        <h3>Low vs High Coverage: Same Model, Better Input</h3>
-        <img src="high_coverage_showcase/05_low_vs_high.png" alt="Low vs high">
-        <p>Two maps hit <strong>perfect IoU (1.00 and 0.99)</strong> with just 5 scans.</p>
-    </div>
-
-    <div class="card">
-        <h3>Sample Diversity (K=8)</h3>
-        <img src="high_coverage_showcase/03_diversity.png" alt="Diversity">
-    </div>
-
-    <div class="card">
-        <h3>Uncertainty Maps</h3>
-        <img src="coverage_artifacts/05_confidence.png" alt="Uncertainty">
-        <p>Bright = high disagreement across K=8 samples. Uncertainty shrinks as robot explores. These are exactly the regions where frontier exploration adds value.</p>
-    </div>
-
-    <div class="card">
-        <h3>Best vs Worst Predictions</h3>
-        <img src="showcase/05_best_worst.png" alt="Best worst">
-    </div>
-
-    <div class="card">
-        <h3>Diffusion vs Baseline: +24.5% Information Gain</h3>
-        <img src="comparison/comparison_grid.png" alt="Comparison">
-        <div class="metrics">
-            <div class="metric-card"><div class="val">+24.5%</div><div class="lbl">Info Gain</div></div>
-            <div class="metric-card"><div class="val">3 / 10</div><div class="lbl">Diff Wins</div></div>
-            <div class="metric-card"><div class="val">0 / 10</div><div class="lbl">Base Wins</div></div>
-        </div>
-    </div>
-</div>
-
-<!-- 6. Exploration -->
-<div class="section" id="exploration">
-    <div class="section-header">
-        <div class="section-num s6">6</div>
-        <div class="section-title">Full Exploration Demo</div>
-        <div class="section-date">May 24</div>
-    </div>
-
-    <div class="card">
-        <h3>🎬 Diffusion-Guided Exploration</h3>
-        <p>Robot explores a 6-room floor plan. At each step: scan → predict → score frontiers → drive to best. IoU reaches <strong>0.97</strong>.</p>
-        <div class="gif-showcase">
-            <div class="gif-item" style="grid-column: 1 / -1;"><img src="exploration_demo/exploration_diffusion.gif" alt="Diffusion exploration"><div class="gif-label">Diffusion-guided: 91% coverage in 11 steps</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🎬 Baseline Exploration (for comparison)</h3>
-        <div class="gif-showcase">
-            <div class="gif-item" style="grid-column: 1 / -1;"><img src="exploration_demo/exploration_baseline.gif" alt="Baseline"><div class="gif-label">Baseline heuristic: 94% coverage in 9 steps</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>🎬 Coverage Sweep</h3>
-        <p>Watch IoU grow as robot scans more of the environment:</p>
-        <div class="gif-showcase">
-            <div class="gif-item"><img src="coverage_artifacts/01_exploration.gif" alt="Exploration"><div class="gif-label">Step-by-step exploration</div></div>
-            <div class="gif-item"><img src="coverage_artifacts/03_coverage_sweep.gif" alt="Sweep"><div class="gif-label">IoU bar chart growing</div></div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h3>The Exploration Story</h3>
-        <img src="coverage_artifacts/06_exploration_story.png" alt="Story">
-        <p>From first scan (IoU 0.77) to near-complete map (IoU 0.89). Middle row shows diffusion predictions improving as more of the map is revealed.</p>
-    </div>
-</div>
-
-<!-- 7. Status -->
-<div class="section" id="status">
-    <div class="section-header">
-        <div class="section-num s7">7</div>
-        <div class="section-title">Project Status</div>
-    </div>
-    <div class="card">
-        <table class="nice">
-            <tr><th>Deliverable</th><th>Status</th><th>Details</th></tr>
-            <tr><td>Data pipeline</td><td><span class="badge badge-done">DONE</span></td><td>2.66M training pairs, 8x augmentation</td></tr>
-            <tr><td>U-Net + DDPM</td><td><span class="badge badge-done">DONE</span></td><td>4.2M params, attention at bottleneck</td></tr>
-            <tr><td>Training</td><td><span class="badge badge-done">DONE</span></td><td>29 epochs, loss 0.0007, T4 GPU</td></tr>
-            <tr><td>Evaluation</td><td><span class="badge badge-done">DONE</span></td><td>82% accuracy, IoU 0.62-0.88</td></tr>
-            <tr><td>Frontier scorer</td><td><span class="badge badge-done">DONE</span></td><td>+24.5% info gain vs baseline</td></tr>
-            <tr><td>Exploration sim</td><td><span class="badge badge-done">DONE</span></td><td>Full loop, 91% coverage</td></tr>
-            <tr><td>ROS 2 nodes</td><td><span class="badge badge-done">DONE</span></td><td>3 nodes + launch script</td></tr>
-            <tr><td>Visual artifacts</td><td><span class="badge badge-done">DONE</span></td><td>50+ images, 20+ GIFs</td></tr>
-            <tr><td>Live Stage demo</td><td><span class="badge badge-wip">WIP</span></td><td>Blocked by Docker CPU emulation speed</td></tr>
-            <tr><td>IEEE report</td><td><span class="badge badge-todo">TODO</span></td><td>4-page paper</td></tr>
-            <tr><td>Presentation</td><td><span class="badge badge-todo">TODO</span></td><td>6-min slides</td></tr>
-            <tr><td>Demo video</td><td><span class="badge badge-todo">TODO</span></td><td>3-min teaser</td></tr>
-        </table>
-        <div style="margin-top: 20px;">
-            <p style="color: var(--text2); font-size: 0.9em;">Overall completion:</p>
-            <div class="progress-bar"><div class="fill" style="width: 75%; background: linear-gradient(90deg, var(--accent2), var(--neon));"></div></div>
-            <p style="color: var(--neon); font-weight: 600;">75% complete</p>
-        </div>
-    </div>
-</div>
+  <div class="card">
+    <ul style="padding-left: 24px; color: var(--ink2); font-size: 16px;">
+      <li style="margin-bottom: 12px;"><strong>Distillation to Jetson</strong>: sub-second inference unlocks +10pp on real robots.</li>
+      <li style="margin-bottom: 12px;"><strong>Richer training domains</strong>: Gibson, Matterport, BIM data.</li>
+      <li style="margin-bottom: 12px;"><strong>K-sample disagreement as fallback trigger</strong>: detect hard maps, switch to heuristic.</li>
+      <li style="margin-bottom: 0;"><strong>Live ROSbot deployment</strong> in a matched-distribution building.</li>
+    </ul>
+  </div>
+</section>
 
 </div>
 
-<div class="footer">
-    <p style="font-size: 1.1em; margin-bottom: 10px;">Diffusion-Based Map Completion for Frontier Exploration</p>
-    <p>COSC 81/281 &bull; Moin Mattar &bull; Dartmouth College &bull; Spring 2026</p>
-    <p style="margin-top: 15px;"><a href="https://github.com/mo-root/Robots_diffusion_planner">GitHub Repository</a></p>
-</div>
+<footer class="footer">
+  <p style="font-size: 17px; color: var(--ink); font-weight: 600;">Diffusion-Guided Frontier Exploration</p>
+  <p><strong>Moin Mattar</strong>  ·  Dartmouth College</p>
+  <p style="margin-top: 18px;"><a href="https://github.com/mo-root/Robots_diffusion_planner">GitHub repository</a></p>
+</footer>
 
 <script>
-function toggleTheme() {
-    const body = document.body;
-    body.dataset.theme = body.dataset.theme === 'dark' ? 'light' : 'dark';
-}
-
 // Sticky nav active state
 const sections = document.querySelectorAll('.section');
 const navLinks = document.querySelectorAll('.nav a');
 window.addEventListener('scroll', () => {
-    let current = '';
-    sections.forEach(s => {
-        if (window.scrollY >= s.offsetTop - 100) current = s.id;
-    });
-    navLinks.forEach(a => {
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-    });
-});
-
-// Animate metrics on scroll
-const observer = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-        if (e.isIntersecting) e.target.style.opacity = '1';
-    });
-}, { threshold: 0.1 });
-document.querySelectorAll('.card, .metric-card').forEach(el => {
-    el.style.opacity = '0';
-    el.style.transition = 'opacity 0.5s ease-in';
-    observer.observe(el);
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 120) current = s.id;
+  });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
 });
 </script>
 

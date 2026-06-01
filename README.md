@@ -23,21 +23,42 @@ The model generates **multiple plausible completions** (K=8 samples), and fronti
 
 ## Results
 
+### Headline finding
+
+**A learned generative prior gives a robot a measurable head-start in early
+exploration on the matched distribution, and zero advantage on a mismatched one.**
+The advantage is largest on complex maps and disappears once most of the building
+has been observed.
+
+### Per-step coverage advantage (N=80 HouseExpo, complexity-stratified)
+
+| Map complexity (initial frontier count) | Step-4 Δ vs baseline | Wins / Losses / Ties |
+|---|---|---|
+| Low (3-15 frontiers) | +2.56% | 10 / 6 / 10 |
+| Mid (15-19 frontiers) | +1.20% | 12 / 14 / 1 |
+| **High (19-35 frontiers)** | **+4.74%** | **18 / 4 / 5** |
+
+### Cross-domain ablation (N=30 HouseExpo)
+
+| Model trained on | Step-4 Δ vs baseline | Wins / Losses / Ties |
+|---|---|---|
+| HouseExpo (in-domain) | **+3.47%** | 18 / 8 / 4 |
+| Warehouse (out-of-domain) | -0.09% | 9 / 12 / 9 |
+
+Same scoring code, same maps, same lidar. Only the training distribution
+differs. The prior helps only when matched to deployment.
+
+### Model quality (sanity-check metrics)
+
 | Metric | Value |
 |---|---|
-| **Pixel Accuracy** | 82.0% |
-| **IoU (1 scan)** | 0.621 |
-| **IoU (5 scans)** | 0.875 |
-| **Info Gain vs Baseline** | +24.5% |
-| **Training Time** | ~10 hours (Tesla T4) |
+| Pixel accuracy | 82.0% |
+| IoU (1 scan) | 0.621 |
+| IoU (5 scans) | 0.875 |
+| Training time | ~10 hours on Tesla T4 |
 
-![Results](results/presentation/04_results_poster.png)
-
-### Key Finding: More Coverage = Better Predictions
-
-The model was trained on single-scan inputs (~10% coverage) but generalizes to multi-scan inputs. With realistic exploration coverage (5-8 scans), IoU jumps to 0.88-1.00.
-
-![Coverage](results/coverage_analysis/coverage_comparison_bar.png)
+Live, presentation-ready figures: `results/analysis/figures/`. The full
+interactive walkthrough is `explainer.html`. The 8-slide deck is `slides.html`.
 
 ### Denoising Process
 

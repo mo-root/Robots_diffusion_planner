@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<title>Diffusion-Guided Frontier Exploration — Final Presentation</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #f4f7f3;
+    --ink: #1a1a1a;
+    --dim: #555555;
+    --green: #1f6b47;
+    --green-light: #2d8a5c;
+    --accent: #2563eb;
+    --orange: #d97706;
+    --red: #b91c1c;
+    --line: #d1d5db;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #0a0a0a;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Calibri", "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #deck {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    transform-origin: center center;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg);
+    padding: 80px 100px;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* Title block */
+  .title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  h1.t {
+    font-size: 56px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--ink);
+    line-height: 1.05;
+  }
+  h1.t .green { color: var(--green); }
+  .titlebar {
+    height: 5px;
+    background: var(--ink);
+    width: 100%;
+    margin: 14px 0 22px;
+  }
+  .subtitle {
+    color: var(--dim);
+    font-size: 22px;
+    font-style: italic;
+    margin-bottom: 14px;
+  }
+
+  .section-divider {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 60px;
+    padding-left: 80px;
+  }
+  .section-divider .num {
+    font-size: 110px;
+    font-weight: 800;
+    color: var(--green);
+    border-right: 6px solid var(--ink);
+    padding-right: 50px;
+    line-height: 1;
+  }
+  .section-divider .label {
+    font-size: 86px;
+    font-weight: 800;
+    color: var(--green);
+    line-height: 1.05;
+  }
+  .section-divider .sub {
+    font-size: 30px;
+    color: var(--dim);
+    margin-top: 18px;
+    font-style: italic;
+    max-width: 1100px;
+  }
+
+  /* Bullets */
+  ul.b {
+    list-style: none;
+    margin-top: 18px;
+  }
+  ul.b li {
+    font-size: 24px;
+    line-height: 1.45;
+    padding: 12px 0 12px 36px;
+    position: relative;
+    color: var(--ink);
+  }
+  ul.b li::before {
+    content: "■";
+    position: absolute;
+    left: 0;
+    top: 13px;
+    color: var(--green);
+    font-size: 18px;
+  }
+  ul.b.small li { font-size: 20px; padding: 8px 0 8px 30px; }
+  ul.b.small li::before { font-size: 14px; top: 12px; }
+  ul.b b { color: var(--green); font-weight: 700; }
+  ul.b em { color: var(--dim); }
+
+  /* Two column generic */
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 50px;
+    flex: 1;
+    align-items: start;
+  }
+  .two.center { align-items: center; }
+  .two.eq { grid-template-columns: 1fr 1fr; }
+
+  /* Media cards */
+  .media-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  }
+  .media-card img { width: 100%; display: block; border-radius: 6px; }
+  .media-card .cap {
+    margin-top: 10px;
+    font-size: 16px;
+    color: var(--dim);
+    font-style: italic;
+    text-align: center;
+  }
+
+  /* Big single-image slide */
+  .big-fig {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 0;
+  }
+  .big-fig img {
+    max-width: 100%;
+    max-height: 800px;
+    border-radius: 10px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.18);
+  }
+  .big-fig .cap {
+    font-size: 22px;
+    color: var(--dim);
+    font-style: italic;
+    text-align: center;
+    max-width: 1700px;
+  }
+
+  /* Hypothesis box */
+  .hyp {
+    border-left: 8px solid var(--green);
+    background: #f4faf6;
+    padding: 28px 36px;
+    margin-top: 14px;
+    border-radius: 0 12px 12px 0;
+  }
+  .hyp .lbl {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+  .hyp .body {
+    font-size: 26px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .hyp .body b { color: var(--green); }
+
+  /* Stat row */
+  .stats {
+    display: flex;
+    gap: 24px;
+    margin-top: 22px;
+  }
+  .stat {
+    flex: 1;
+    background: var(--panel);
+    border-left: 5px solid var(--green);
+    padding: 18px 22px;
+    border-radius: 0 10px 10px 0;
+  }
+  .stat .num {
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--green);
+    line-height: 1;
+  }
+  .stat .lbl {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    line-height: 1.35;
+  }
+  .stat.warn { border-color: var(--red); }
+  .stat.warn .num { color: var(--red); }
+  .stat.accent { border-color: var(--accent); }
+  .stat.accent .num { color: var(--accent); }
+  .stat.orange { border-color: var(--orange); }
+  .stat.orange .num { color: var(--orange); }
+
+  /* Pipeline */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 28px;
+    margin-top: 30px;
+    flex: 1;
+    align-items: stretch;
+  }
+  .pipe {
+    background: var(--panel);
+    border-radius: 16px;
+    padding: 28px 26px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .pipe.green { border-top: 6px solid var(--green); }
+  .pipe.orange { border-top: 6px solid var(--orange); }
+  .pipe.yellow { border-top: 6px solid #d4a017; }
+  .pipe.blue { border-top: 6px solid var(--accent); }
+  .pipe .num {
+    font-size: 56px;
+    font-weight: 800;
+    color: var(--ink);
+    opacity: 0.15;
+    line-height: 1;
+  }
+  .pipe .title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-top: 6px;
+  }
+  .pipe .desc {
+    font-size: 16px;
+    color: var(--dim);
+    margin-top: 14px;
+    line-height: 1.45;
+    flex: 1;
+  }
+
+  /* Demo strip — multiple gifs on one slide */
+  .gif-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    flex: 1;
+    align-items: center;
+  }
+  .gif-grid-2 .item img { width: 100%; border-radius: 8px; }
+  .gif-grid-2 .item .lbl {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .gif-grid-2 .item .lbl.green { color: var(--green); }
+  .gif-grid-2 .item .lbl.orange { color: var(--orange); }
+
+  /* Math */
+  .math {
+    font-family: "Latin Modern Math", "Cambria Math", serif;
+    font-size: 26px;
+    text-align: center;
+    margin: 18px 0;
+    color: var(--ink);
+  }
+  .math em { font-style: italic; }
+
+  /* Page metadata */
+  .pagenum {
+    position: absolute;
+    bottom: 24px;
+    right: 36px;
+    font-size: 13px;
+    color: var(--dim);
+  }
+  .corner {
+    position: absolute;
+    bottom: 24px;
+    left: 100px;
+    font-size: 13px;
+    color: var(--dim);
+  }
+
+  /* Help text */
+  .nav-help {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.45);
+    font-size: 12px;
+    z-index: 100;
+  }
+
+  /* Print */
+  @media print {
+    html, body { background: white; }
+    #stage { position: relative; display: block; }
+    #deck { transform: none !important; width: auto; height: auto; }
+    .slide { display: flex !important; page-break-after: always; page-break-inside: avoid; }
+    .nav-help { display: none; }
+    @page { size: 1920px 1080px; margin: 0; }
+  }
+
+  .signature {
+    margin-top: 40px;
+    color: var(--dim);
+    font-size: 18px;
+  }
+  .signature b { color: var(--ink); font-size: 22px; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="deck">
+
+<!-- ================== SLIDE 1: TITLE ================== -->
+<section class="slide active">
+  <div style="margin-top:140px;">
+    <div style="font-size:22px; color:var(--dim); letter-spacing:2px; font-weight:700; text-transform:uppercase;">COSC 81/281  ·  Final Project  ·  Spring 2026</div>
+    <h1 style="font-size:96px; font-weight:800; letter-spacing:-2px; line-height:1.02; margin-top:36px; color:var(--ink);">
+      Diffusion-Guided<br><span style="color:var(--green);">Frontier Exploration</span>
+    </h1>
+    <div style="font-size:32px; color:var(--dim); margin-top:32px; font-style:italic; max-width:1500px; line-height:1.4;">
+      Can a generative model of buildings help a robot decide where to drive next,<br>
+      and just as importantly, when can it not?
+    </div>
+    <div class="signature">
+      <b>Moin Mattar</b><br>
+      Dartmouth COSC 81/281  ·  June 1, 2026
+      <div style="margin-top:6px; font-size:12px;">AI helped me in formatting and writing (HTML/CSS/LaTeX), as well as explained concepts.</div>
+    </div>
+  </div>
+  <div class="pagenum">1 / 18</div>
+</section>
+
+<!-- ================== SLIDE 2: SECTION DIVIDER — PROBLEM ================== -->
+<section class="slide">
+  <div class="section-divider">
+    <div class="num">1</div>
+    <div>
+      <div class="label">The Problem</div>
+      <div class="sub">A robot at the door of a building it has never seen.</div>
+    </div>
+  </div>
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">2 / 18</div>
+</section>
+
+<!-- ================== SLIDE 3: PROBLEM STATEMENT ================== -->
+<section class="slide">
+  <h1 class="t">Project Goal</h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Autonomous mapping of an unknown building, one frontier decision at a time.</div>
+
+  <div class="two">
+    <div>
+      <ul class="b">
+        <li><b>Setup:</b> a robot is dropped at the door of a building it has never seen, with only a 2D lidar.</li>
+        <li><b>Input each step:</b> the partial occupancy grid the robot has accumulated so far.</li>
+        <li><b>Output each step:</b> the next frontier to drive to &mdash; the boundary between known and unknown.</li>
+        <li><b>Assumption:</b> deployment environment shares structural distribution with training data.</li>
+        <li><b>What's broken:</b> classical frontier scoring is memoryless &mdash; it throws away the fact that real buildings have walls that run straight, hallways that connect rooms, doors that cluster.</li>
+      </ul>
+    </div>
+    <div class="media-card">
+      <img src="results/exploration_demo/exploration_baseline.gif" alt="Baseline exploration loop">
+      <div class="cap">The classical loop: partial map (left), no prediction (middle), ground truth (right).</div>
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">3 / 18</div>
+</section>
+
+<!-- ================== SLIDE 4: NOVELTY + HYPOTHESIS ================== -->
+<section class="slide">
+  <h1 class="t">Novelty &amp; Hypothesis</h1>
+  <div class="titlebar"></div>
+
+  <div style="font-size:22px; font-weight:700; color:var(--green); letter-spacing:1px; text-transform:uppercase; margin-bottom:14px;">What's new here</div>
+  <ul class="b small" style="margin-top:0;">
+    <li>We treat <b>diffusion samples as imagined buildings</b>, not just predictions. K=8 plausible completions per frontier decision.</li>
+    <li>We use <b>K-sample disagreement as an upper-confidence-bound exploration signal</b> &mdash; the variance is the feature, not noise to average out.</li>
+    <li>We isolate <b>where the wins come from</b> with a 4-baseline ablation, plus an out-of-domain control that proves the prior is doing real structural work.</li>
+  </ul>
+
+  <div style="font-size:22px; font-weight:700; color:var(--ink); margin-top:30px; margin-bottom:8px;">Hypothesis</div>
+  <div class="hyp">
+    <div class="body">
+      A learned generative prior of building layouts gives a robot a measurable early-budget head start in frontier exploration &mdash; <em>but only when</em>
+      <b>(1) the training distribution matches deployment</b>,
+      <b>(2) the step budget is tight</b>, and
+      <b>(3) inference is fast enough to drive</b>.
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">4 / 18</div>
+</section>
+
+<!-- ================== SLIDE 5: SECTION DIVIDER — APPROACH ================== -->
+<section class="slide">
+  <div class="section-divider">
+    <div class="num">2</div>
+    <div>
+      <div class="label">Our Approach</div>
+      <div class="sub">HouseExpo &rarr; conditional U-Net (DDPM) &rarr; K-sample scoring &rarr; frontier pick.</div>
+    </div>
+  </div>
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">5 / 18</div>
+</section>
+
+<!-- ================== SLIDE 6: END-TO-END PIPELINE ================== -->
+<section class="slide">
+  <h1 class="t">End-to-End Pipeline I Implemented</h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Four stages. The middle two are the new logic beyond the PA assignments.</div>
+
+  <div class="pipeline">
+    <div class="pipe green">
+      <div class="num">01</div>
+      <div class="title">Data</div>
+      <div class="desc">HouseExpo: 35,126 residential floor plans. Per plan I generate partial views via simulated lidar and pair them with the hidden remainder. Augmentation (4 rotations + flips) yields 2.66M training pairs.</div>
+    </div>
+    <div class="pipe orange">
+      <div class="num">02</div>
+      <div class="title">Model</div>
+      <div class="desc">Conditional U-Net, 4.16M params, sinusoidal time embedding. Trained with DDPM (MSE on noise) for 29 epochs on a T4 GPU. Loss converges from 0.033 to 0.0007.</div>
+    </div>
+    <div class="pipe yellow">
+      <div class="num">03</div>
+      <div class="title">Scoring</div>
+      <div class="desc">K=8 DDIM completions per frontier decision. Score = E[gain] + &lambda;&middot;Std[gain] &minus; &beta;&middot;dist. Variance across K samples = uncertainty-driven exploration bonus.</div>
+    </div>
+    <div class="pipe blue">
+      <div class="num">04</div>
+      <div class="title">Integration</div>
+      <div class="desc">ROS 2 node publishes to <code>/best_frontier</code>. Exploration manager (from PA3) drives the robot in Stage. Pre-computed waypoints used due to Docker QEMU latency on Apple Silicon.</div>
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">6 / 18</div>
+</section>
+
+<!-- ================== SLIDE 7: DATA ================== -->
+<section class="slide">
+  <h1 class="t">The Data: <span class="green">HouseExpo</span></h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">35,126 residential floor plans &rarr; 2.66M (partial, hidden) training pairs after augmentation.</div>
+
+  <div class="big-fig">
+    <img src="results/data_artifacts/01_sample_grid_20.png" alt="Sample training pairs">
+    <div class="cap">For each training pair: left = ground truth occupancy grid, middle = partial map (input), right = hidden remainder (target).</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">7 / 18</div>
+</section>
+
+<!-- ================== SLIDE 8: TRAINING ================== -->
+<section class="slide">
+  <h1 class="t">Training: loss <span class="green">0.033 &rarr; 0.0007</span> over 29 epochs</h1>
+  <div class="titlebar"></div>
+
+  <div class="big-fig">
+    <img src="docs/fig_loss.png" alt="Training loss and validation IoU curves">
+    <div class="cap">Left: MSE on noise dropped two orders of magnitude. Right: validation IoU averaged 0.66 (best 0.77). The model is genuinely learning building structure.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">8 / 18</div>
+</section>
+
+<!-- ================== SLIDE 9: DENOISING ANIMATION ================== -->
+<section class="slide">
+  <h1 class="t">How the model thinks: <span class="green">noise &rarr; building</span></h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Real DDIM output. Starting from pure Gaussian noise, the model denoises into a coherent floor plan over ~30 steps.</div>
+
+  <div class="big-fig">
+    <img src="results/showcase/02_denoising_process.gif" alt="DDIM denoising animation">
+    <div class="cap">Left panel: the sample emerging from noise. Right panel: the partial-map condition (held fixed). After ~30 DDIM steps a plausible floor plan has appeared.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">9 / 18</div>
+</section>
+
+<!-- ================== SLIDE 10: K-SAMPLE DIVERSITY ================== -->
+<section class="slide">
+  <h1 class="t">K = 8 imagined buildings &mdash; <span class="green">variance is the signal</span></h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Eight DDIM samples from the same partial input. Where the partial map already constrains structure, samples agree. Where it does not, they diverge.</div>
+
+  <div class="big-fig">
+    <img src="results/showcase/03_sample_diversity.png" alt="K=8 sample diversity across multiple partial maps">
+    <div class="cap">That disagreement is the upper-confidence-bound bonus we feed into the frontier scorer.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">10 / 18</div>
+</section>
+
+<!-- ================== SLIDE 11: SECTION DIVIDER — DEMOS ================== -->
+<section class="slide">
+  <div class="section-divider">
+    <div class="num">3</div>
+    <div>
+      <div class="label">Demo &amp; Results</div>
+      <div class="sub">The loop running. How it compares. Where it wins. Where it fails.</div>
+    </div>
+  </div>
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">11 / 18</div>
+</section>
+
+<!-- ================== SLIDE 12: DEMO — THE LOOP (main GIF for prof) ================== -->
+<section class="slide">
+  <h1 class="t">DEMO &mdash; the loop running end-to-end</h1>
+  <div class="titlebar"></div>
+
+  <div class="big-fig">
+    <img src="results/exploration_demo/exploration_diffusion.gif" alt="Diffusion-guided exploration loop">
+    <div class="cap"><b>Left:</b> partial map + scored frontiers (yellow = candidates, orange = top, green star = picked). <b>Middle:</b> the diffusion model's prediction. <b>Right:</b> ground truth (robot does not see this). <b>Far right:</b> coverage growing.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">12 / 18</div>
+</section>
+
+<!-- ================== SLIDE 13: DEMO — DIFFUSION vs BASELINE side-by-side ================== -->
+<section class="slide">
+  <h1 class="t">DEMO &mdash; <span class="green">diffusion vs baseline</span>, same map</h1>
+  <div class="titlebar"></div>
+
+  <div class="big-fig">
+    <img src="results/analysis/figures/17_side_by_side_demo.gif" alt="Side-by-side diffusion vs baseline">
+    <div class="cap">Top: diffusion-guided. Bottom: heuristic baseline. Same map, same start, same lidar. Both reach high coverage; diffusion is consistently ahead in the early steps.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">13 / 18</div>
+</section>
+
+<!-- ================== SLIDE 14: DEMO — 4 METHODS SYNCHRONIZED ================== -->
+<section class="slide">
+  <h1 class="t">DEMO &mdash; <span class="green">four frontier scorers</span>, synchronized</h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Same map (HouseExpo 2638), identical start, identical seed. Watch the coverage % tickers.</div>
+
+  <div class="big-fig">
+    <img src="results/analysis/figures/16_4method_sync.gif" alt="Four-method synchronized comparison">
+    <div class="cap">Nearest crawls. Info-gain methods commit to a wing. Diffusion (ours) commits earliest and reaches 95% by step 4.</div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">14 / 18</div>
+</section>
+
+<!-- ================== SLIDE 15: BEHIND THE MIND + STAGE ================== -->
+<section class="slide">
+  <h1 class="t">Behind the mind  +  Stage / ROS 2 integration</h1>
+  <div class="titlebar"></div>
+
+  <div class="gif-grid-2">
+    <div class="item">
+      <div class="lbl green">Behind the mind &mdash; map 2638</div>
+      <img src="results/analysis/figures/15_behind_mind_map2638.png" alt="Behind the mind composite">
+      <div style="font-size:14px; color:var(--dim); font-style:italic; text-align:center; margin-top:8px;">Top: world + trail. Middle: partial + frontiers. Bottom: model's imagined building + picked frontier.</div>
+    </div>
+    <div class="item">
+      <div class="lbl orange">Stage simulator &mdash; ROS 2 pipeline running</div>
+      <img src="results/stage_demo/maze_exploration.gif" alt="Stage maze exploration">
+      <div style="font-size:14px; color:var(--dim); font-style:italic; text-align:center; margin-top:8px;">Diffusion-guided robot in the PA3 maze world. Partial map + prediction + ground truth, real ROS 2 nodes.</div>
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">15 / 18</div>
+</section>
+
+<!-- ================== SLIDE 16: RESULTS — 4-BASELINE ABLATION ================== -->
+<section class="slide">
+  <h1 class="t">Results: <span class="green">where do the wins come from?</span></h1>
+  <div class="titlebar"></div>
+  <div class="subtitle">Four scorers, 30 HouseExpo maps, identical seeds.</div>
+
+  <div class="two center">
+    <div class="media-card">
+      <img src="results/analysis/figures/12_4baseline_curves.png" alt="4-baseline coverage curves">
+      <div class="cap">Mean coverage &plusmn; 1 SE over 30 maps. Step 4 marker = early-budget regime.</div>
+    </div>
+    <div>
+      <div class="stats" style="flex-direction:column;">
+        <div class="stat"><div class="num">+3.5pp</div><div class="lbl">Diffusion vs heuristic at step 4. The learned prior on top of info-gain + distance.</div></div>
+        <div class="stat accent" style="margin-top:14px;"><div class="num">+17.5pp</div><div class="lbl">Info-gain vs nearest at step 4. Info-gain is doing most of the work.</div></div>
+        <div class="stat orange" style="margin-top:14px;"><div class="num">~0pp</div><div class="lbl">Distance term contribution. Decorative on HouseExpo.</div></div>
+      </div>
+      <div style="margin-top:18px; font-size:18px; color:var(--dim); line-height:1.4;">
+        Decomposition: info-gain matters, distance is decorative, the prior adds +3.5pp early-budget on top.
+      </div>
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">16 / 18</div>
+</section>
+
+<!-- ================== SLIDE 17: OOD + REALTIME + HARDSHIPS ================== -->
+<section class="slide">
+  <h1 class="t">Hardships, honest limits, and realtime</h1>
+  <div class="titlebar"></div>
+
+  <div class="two center">
+    <div class="media-card">
+      <img src="results/analysis/figures/07_in_vs_ood_delta.png" alt="In-domain vs OOD ablation">
+      <div class="cap"><b>OOD kill.</b> Warehouse-trained model on residential maps: step-4 advantage drops to <b>&minus;0.1pp</b>. The prior is not a generic averaging trick.</div>
+    </div>
+    <div>
+      <div style="font-size:22px; font-weight:700; color:var(--ink); margin-bottom:10px;">Hardships</div>
+      <ul class="b small">
+        <li><b>Docker QEMU on Apple Silicon</b> too slow for live diffusion in Stage &mdash; switched to pre-computed waypoints.</li>
+        <li><b>Asymptotic catch-up:</b> baseline meets us by step 20.</li>
+        <li><b>2 / 30 hard failures.</b> K-sample disagreement could flag these.</li>
+      </ul>
+      <div style="font-size:22px; font-weight:700; color:var(--green); margin-top:18px; margin-bottom:10px;">Realtime upper bound</div>
+      <div style="font-size:18px; color:var(--ink); line-height:1.5;">
+        DDIM 30 / K=8 = <b>~2 s</b> on T4. <b>DDIM 10 / K=4 = ~500 ms</b> &mdash; exactly the realtime budget. Sampling every 3 cells (the speed a distilled model could achieve) lifts in-domain advantage to <b>+10.0pp</b>.
+      </div>
+    </div>
+  </div>
+
+  <div class="corner">Moin Mattar  ·  Diffusion-Guided Frontier Exploration</div>
+  <div class="pagenum">17 / 18</div>
+</section>
+
+<!-- ================== SLIDE 18: CLOSE ================== -->
+<section class="slide">
+  <h1 class="t">Conclusion &amp; what's next</h1>
+  <div class="titlebar"></div>
+
+  <div class="two">
+    <div>
+      <div style="font-size:22px; font-weight:700; color:var(--green); margin-bottom:10px;">The hypothesis held, conditionally</div>
+      <ul class="b small">
+        <li><b>+3.5pp early-budget advantage</b> in-domain. Grows to <b>+4.7pp</b> on the hardest decile.</li>
+        <li><b>OOD kill: &minus;0.1pp</b> with a mismatched prior &mdash; the prior is doing real structural work.</li>
+        <li><b>Realtime upper bound: +10pp</b> if inference were free. Distillation is the path.</li>
+      </ul>
+    </div>
+    <div>
+      <div style="font-size:22px; font-weight:700; color:var(--accent); margin-bottom:10px;">What's next</div>
+      <ul class="b small">
+        <li><b>Distillation</b> to Jetson for sub-second inference on a real robot.</li>
+        <li><b>Richer training domains</b> (Gibson, Matterport, BIM data) for cross-environment generalisation.</li>
+        <li><b>K-sample disagreement</b> as an "I don't know" flag to fall back to heuristic.</li>
+        <li><b>Diffusion Forcing for maps</b> &mdash; sequential prediction across exploration timesteps.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="text-align:center; font-size:46px; font-weight:800; color:var(--green); margin-top:50px;">
+    Thank you. Questions?
+  </div>
+
+  <div class="signature" style="text-align:center; margin-top:30px;">
+    <b>Moin Mattar</b>  ·  COSC 81/281  ·  June 1, 2026<br>
+    <span style="font-size:12px;">AI helped me in formatting and writing (HTML/CSS/LaTeX), as well as explained concepts.</span>
+  </div>
+
+  <div class="pagenum">18 / 18</div>
+</section>
+
+</div>
+</div>
+
+<div class="nav-help">arrows / space / click to advance &middot; p to print to PDF</div>
+
+<script>
+(function() {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let idx = 0;
+
+  function show(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+    location.hash = '#' + (idx + 1);
+  }
+  function next() { show(idx + 1); }
+  function prev() { show(idx - 1); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault(); next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault(); prev();
+    } else if (e.key === 'Home') {
+      e.preventDefault(); show(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); show(slides.length - 1);
+    } else if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault(); window.print();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('a, button, input, textarea, select')) return;
+    if (e.clientX < window.innerWidth * 0.25) prev(); else next();
+  });
+
+  const deck = document.getElementById('deck');
+  function rescale() {
+    const W = window.innerWidth, H = window.innerHeight;
+    const scale = Math.min(W / 1920, H / 1080);
+    deck.style.transform = 'scale(' + scale + ')';
+  }
+  window.addEventListener('resize', rescale);
+  rescale();
+
+  const hashN = parseInt((location.hash || '#1').slice(1), 10);
+  if (!isNaN(hashN) && hashN >= 1 && hashN <= slides.length) show(hashN - 1);
+})();
+</script>
+
+</body>
+</html>

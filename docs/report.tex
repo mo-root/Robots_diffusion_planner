@@ -118,27 +118,48 @@ Sample Diversity & 0.223 & 0.039 \\
 
 \textbf{Coverage sensitivity.} A key finding is that prediction quality improves dramatically with input coverage. Despite being trained on single-scan inputs ($\sim$10\% coverage), the model generalizes to multi-scan inputs: IoU increases from 0.63 (1 scan) to 0.88 (8 scans, $\sim$55\% coverage). This is significant because in practice, the model is invoked after the robot has been exploring for some time and has accumulated multiple scans.
 
-\subsection{Frontier Scoring Comparison}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{12_4baseline_curves.png}
+\caption{4-baseline coverage curves on 30 HouseExpo maps. Shaded bands are $\pm 1$ standard error. The dashed line marks step 4 (the early-budget regime). Info-gain alone is nearly identical to info-gain + distance; the diffusion scorer adds a measurable +3.5pp early-budget lead.}
+\label{fig:4baseline}
+\end{figure}
 
-We compare our diffusion-based scorer against a heuristic baseline that scores frontiers by nearby unknown cell count minus distance cost. On 10 maps with 3 scans each:
+\subsection{Frontier Scoring Comparison: 4-Baseline Ablation}
+
+To isolate \emph{where the win comes from}, we compare four scorers on the same 30 held-out HouseExpo maps with identical lidar range (70px), identical seeds, and a 20-step rollout budget:
+
+\begin{itemize}
+    \item \textbf{Nearest}: $\arg\min_f d(\mathrm{robot}, f)$.
+    \item \textbf{Info-gain only}: $\arg\max_f N_{\mathrm{unknown}}(f)$, sensor footprint, no distance.
+    \item \textbf{Info-gain + distance} (the conventional heuristic): $N_{\mathrm{unknown}}(f) - \beta \cdot d(\mathrm{robot}, f)$.
+    \item \textbf{Diffusion (ours)}: $\mathbb{E}[G_k(f)] + \lambda \cdot \mathrm{Std}[G_k(f)] - \beta \cdot d(\mathrm{robot}, f)$ over $K=8$ completions.
+\end{itemize}
 
 \begin{table}[h]
 \centering
-\caption{Frontier scoring: actual information gain at chosen frontier}
+\caption{4-baseline ablation, N=30 HouseExpo maps (mean values)}
 \label{tab:comparison}
-\begin{tabular}{lcc}
+\begin{tabular}{lcccc}
 \toprule
-Method & Avg Info Gain & Win Rate \\
+Method & Step-4 cov & Final cov & Steps to 80\% & 80\% reach \\
 \midrule
-Baseline (heuristic) & 163.5 & 0/10 \\
-Ours (diffusion) & 203.6 & 3/10 \\
-\midrule
-Improvement & +24.5\% & -- \\
+Nearest             & 42.6\% & 88.0\% & 12.1 & 80.0\% \\
+Info-gain only      & 60.1\% & 94.2\% & 6.4  & 96.7\% \\
+Info-gain + dist    & 59.2\% & 94.2\% & 6.5  & 96.7\% \\
+Diffusion (ours)    & \textbf{62.7\%} & 91.7\% & \textbf{6.3} & 90.0\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The diffusion scorer selects frontiers with 24.5\% higher actual information gain. It wins on 3 maps and ties on 7; the baseline never wins.
+The ablation decomposes the classical pipeline cleanly: switching from nearest to info-gain alone is worth +17.5pp at step 4, while adding the distance penalty on top of info-gain contributes essentially nothing on this distribution ($-$0.9pp at step 4, identical final coverage). The diffusion scorer then adds another +3.5pp on top of the conventional heuristic, concentrated in the early-budget regime. Asymptotically, the heuristic catches up: by step 20 the diffusion final coverage is $\sim$2.5pp \emph{lower} than the heuristic mean, driven by a small number of hard failures where the model gets stuck (see Limitations).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{14_rollout_map2638.png}
+\caption{Side-by-side rollout on map 2638 (a dramatic-win case): identical start position, lidar, and step budget. By step 4 the diffusion scorer has driven into the building's main wing and reached 95\% coverage, while info-gain-based methods plateau at 74\% and nearest is at 65\%.}
+\label{fig:rollout}
+\end{figure}
 
 \begin{figure}[t]
 \centering
@@ -175,7 +196,7 @@ ROS 2 nodes are implemented for all three components, with a launch script for o
 
 The uncertainty signal from sample diversity proves valuable for exploration. Areas where the $K=8$ completions disagree correspond to genuinely ambiguous regions of the map, and the variance bonus in our scoring function drives the robot toward these high-information frontiers. We observe uncertainty decreasing from 0.20 (1 scan) to 0.05 (8 scans), confirming that the model's confidence calibration is meaningful.
 
-\textbf{Limitations.} Inference time ($\sim$1.5s per completion on Apple Silicon MPS, $\sim$30s on emulated CPU) limits real-time deployment in resource-constrained settings. The model struggles with complex multi-room layouts at very low coverage ($<$5\%), producing blurry predictions with IoU as low as 0.25. The fixed $256 \times 256$ resolution requires cropping larger environments, potentially losing global context. Additionally, the model was trained on residential floor plans from HouseExpo and may not generalize to industrial or outdoor environments without fine-tuning.
+\textbf{Limitations.} The empirical advantage of the learned prior is concentrated in the early-budget regime (steps 1--5) and shrinks toward the asymptote as the partial map becomes most of the truth. On simple maps with low branching factor, the conventional heuristic frequently ties or matches the diffusion scorer, because there is little structural ambiguity for a prior to resolve. On the Stage maze used for ROS 2 integration (10m $\times$ 10m, four rooms), the small scale and clear frontier geometry produce ties on most trials; the method's advantage is a feature of map complexity rather than method strength on every environment. Inference time ($\sim$1.5s per completion on Apple Silicon MPS, $\sim$30s on emulated CPU) limits real-time deployment in resource-constrained settings, though latency profiling shows that $K=4$ samples with 10 DDIM steps is achievable at $\sim$500ms on a T4 GPU. The model struggles with complex multi-room layouts at very low coverage ($<$5\%), producing blurry predictions with IoU as low as 0.25. The fixed $256 \times 256$ resolution requires cropping larger environments, potentially losing global context. Finally, the model was trained on residential floor plans from HouseExpo and does not generalize to mismatched domains: a separate U-Net trained on synthetic warehouse layouts and evaluated on HouseExpo collapses to a step-4 advantage of $-0.1$pp, a clean negative control confirming the prior is not a generic averaging trick.
 
 \textbf{Ablations.} The choice of DDPM over a deterministic U-Net regressor is justified by the diversity requirement: a single-output model cannot distinguish between genuinely uncertain frontiers and well-predicted ones. The variance term $\lambda \cdot \text{Std}[G_k(f)]$ accounts for 8--12\% of the final score on average, but its contribution is highest precisely at the frontiers where exploration is most valuable.
 
@@ -193,7 +214,7 @@ Learned map completion raises a genuine dual-use dilemma. The same structural pr
 
 \section{Conclusion}
 
-We demonstrated that conditional diffusion models can effectively predict occupancy grid completions for frontier-based exploration. Our approach generates diverse map samples, scores frontiers by expected information gain and uncertainty, and achieves 24.5\% higher information gain compared to heuristic baselines. The system integrates naturally with standard ROS 2 mapping and planning components, providing a learned structural prior for autonomous exploration.
+We demonstrated that conditional diffusion models can predict occupancy grid completions for frontier-based exploration, and isolated where the win comes from. A 4-baseline ablation shows that on residential floor plans, the conventional information-gain heuristic is mostly the information-gain term itself (the distance penalty contributes essentially nothing on this distribution), and the learned prior adds a further +3.5pp coverage at step 4 over the conventional heuristic in the early-budget regime. The advantage scales with map complexity (+4.7pp on the hardest decile) and vanishes when the prior is mismatched ($-0.1$pp with a warehouse-trained model on residential maps), confirming the prior is doing real structural work rather than acting as an averaging trick. The system integrates with standard ROS 2 mapping and planning components and is most useful in environments with structural ambiguity, a tight exploration budget, and a matched training distribution.
 
 \section*{Acknowledgments}
 

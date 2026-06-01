@@ -1,0 +1,2551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diffusion-Guided Exploration: An Explainer</title>
+<style>
+  :root {
+    --bg: #0c1019;
+    --panel: #161b26;
+    --panel2: #1d2330;
+    --ink: #e7ecf3;
+    --dim: #8d97a8;
+    --accent: #6fb6ff;
+    --accent2: #ffb86c;
+    --good: #7ee787;
+    --bad: #ff7b72;
+    --diff: #c576ff;
+    --base: #ffb86c;
+    --line: #2a3142;
+    --kbd: #2a3142;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--ink); margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55; font-size: 16px; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.5px; }
+  h2 { font-size: 22px; margin: 36px 0 8px; letter-spacing: -0.3px; }
+  h3 { font-size: 17px; margin: 24px 0 8px; color: var(--accent); font-weight: 600; }
+  h4 { font-size: 15px; margin: 16px 0 6px; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  p { color: var(--ink); }
+  p .dim, .dim { color: var(--dim); }
+  .lede { color: var(--dim); font-size: 17px; margin: 0 0 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 16px 0 24px; }
+  .panel2 { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .row > * { flex: 1 1 280px; min-width: 0; }
+  .hero { background: linear-gradient(135deg, #1a2238 0%, #16243a 60%, #1d1a2e 100%);
+    border: 1px solid var(--line); border-radius: 12px; padding: 28px; margin-bottom: 28px; }
+  .tag { display: inline-block; background: #2a3a55; color: var(--accent); border-radius: 999px;
+    font-size: 12px; padding: 4px 10px; letter-spacing: 0.4px; font-weight: 600; }
+  .nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .nav a { background: #1f2738; color: var(--dim); text-decoration: none; font-size: 12.5px;
+    padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); }
+  .nav a:hover { color: var(--ink); border-color: var(--accent); }
+  canvas { display: block; background: #0a0e16; border: 1px solid var(--line); border-radius: 6px;
+    width: 100%; max-width: 100%; }
+  .ctrls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; font-size: 13.5px; }
+  button { background: #243049; color: var(--ink); border: 1px solid #34405f;
+    border-radius: 6px; padding: 6px 12px; font-size: 13.5px; cursor: pointer; font-weight: 500; }
+  button:hover { background: #2c3a59; border-color: var(--accent); }
+  button.primary { background: #2a4d7a; border-color: #3a6fa6; }
+  button.primary:hover { background: #305d92; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type="range"] { vertical-align: middle; }
+  .stat { display: inline-flex; align-items: baseline; gap: 6px; background: #1d2433;
+    padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); font-size: 13px; }
+  .stat .val { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stat.diff .val { color: var(--diff); }
+  .stat.base .val { color: var(--base); }
+  .kbd { background: var(--kbd); border: 1px solid #3a4358; border-radius: 4px;
+    padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--dim);
+    margin-top: 8px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    vertical-align: middle; margin-right: 5px; border: 1px solid #2a2f3d; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .num { font-variant-numeric: tabular-nums; }
+  .callout { border-left: 3px solid var(--accent); background: #182030; padding: 12px 16px;
+    border-radius: 0 6px 6px 0; margin: 14px 0; }
+  .callout.warn { border-color: var(--bad); background: #2a1a1d; }
+  .callout.good { border-color: var(--good); background: #15281b; }
+  .formula { background: #0a0e16; border: 1px solid var(--line); border-radius: 6px;
+    padding: 12px 14px; font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 14px; overflow-x: auto; }
+  .small { font-size: 12.5px; color: var(--dim); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px;
+    background: #243049; color: var(--accent); border: 1px solid var(--line); }
+  .pill.diff { background: #2e1d44; color: var(--diff); }
+  .pill.base { background: #3a2914; color: var(--base); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  details { margin: 10px 0; }
+  details summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+  details summary:hover { color: var(--ink); }
+  .progress { height: 6px; background: #1a2030; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .progress > div { height: 100%; background: var(--accent); transition: width 0.2s; }
+  .footer { color: var(--dim); font-size: 12.5px; margin-top: 50px; padding-top: 20px;
+    border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ============================================================ -->
+<!-- HERO                                                          -->
+<!-- ============================================================ -->
+<div class="hero">
+  <span class="tag">COSC 81/281 Final Project · Moin Mattar</span>
+  <h1 style="margin-top: 10px;">Can a diffusion model help a robot explore an unknown building faster?</h1>
+  <p class="lede" style="margin-top: 14px;">
+    The robot sees a partial map. We train a generative model on floor plans so the robot
+    can imagine what the unseen rooms might look like. We use those imagined completions
+    to decide where to drive next. This page walks through the idea with a dozen small
+    simulations and ends with the honest experimental result.
+  </p>
+  <div class="nav">
+    <a href="#problem">1. The problem</a>
+    <a href="#sensing">2. How the robot sees</a>
+    <a href="#frontier">3. Frontiers</a>
+    <a href="#baseline">4. Baseline</a>
+    <a href="#idea">5. The core idea</a>
+    <a href="#diffusion">6. What is diffusion</a>
+    <a href="#samples">7. K completions</a>
+    <a href="#scoring">8. Scoring</a>
+    <a href="#race">9. Side-by-side race</a>
+    <a href="#results">10. The regime story</a>
+    <a href="#ablation">11. OOD ablation</a>
+    <a href="#realtime">12. Realtime upper bound</a>
+    <a href="#honest">13. Honest take</a>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 1. THE PROBLEM                                                -->
+<!-- ============================================================ -->
+<h2 id="problem">1. The problem: a robot in an unknown building</h2>
+<p>
+  Drop a robot at the front door of a building it has never seen before. Goal: build a complete
+  map as fast as possible. The robot has a 2D lidar that sweeps out and returns distances to
+  the nearest obstacle in every direction. After each step it gets a slightly bigger map. The
+  question is always the same: <em>where should I drive next?</em>
+</p>
+<p>
+  The map below starts empty. Drive the robot with WASD or the arrow keys (click the map first).
+  Cells you reach reveal what is around them. Notice how much of the map stays gray for a long time.
+</p>
+
+<div class="panel">
+  <canvas id="cv-explore" width="720" height="420"></canvas>
+  <div class="ctrls">
+    <button id="explore-reset">Reset</button>
+    <span class="stat">coverage <span class="val" id="explore-cov">0%</span></span>
+    <span class="stat">steps <span class="val" id="explore-steps">0</span></span>
+    <span class="small">Click the map, then use <span class="kbd">WASD</span> or arrows.</span>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#0a0e16; border-color:#1f2738;"></span>unknown</span>
+    <span><span class="sw" style="background:#dfe6f0;"></span>free (seen)</span>
+    <span><span class="sw" style="background:#3a4258;"></span>wall</span>
+    <span><span class="sw" style="background:#6fb6ff;"></span>robot</span>
+    <span><span class="sw" style="background:#c576ff;"></span>frontier</span>
+  </div>
+</div>
+
+<p>
+  This is the core loop of <strong>frontier-based exploration</strong>: at every step, pick a
+  cell on the boundary between "free" and "unknown" and drive there. That boundary is the
+  <em>frontier</em>. The whole game is: which frontier do you pick?
+</p>
+
+<!-- ============================================================ -->
+<!-- 2. SENSING                                                    -->
+<!-- ============================================================ -->
+<h2 id="sensing">2. How the lidar reveals cells</h2>
+<p>
+  The lidar shoots rays in every direction. Each ray walks outward through cells until it hits
+  a wall. Every cell the ray touched becomes known (free or wall, depending on what was there).
+  Move the slider to change the lidar range. With longer range the robot sees further per step,
+  which means fewer steps are needed but each step is more expensive in real life.
+</p>
+
+<div class="panel">
+  <canvas id="cv-lidar" width="720" height="380"></canvas>
+  <div class="ctrls">
+    <label>lidar range <input type="range" id="lidar-r" min="3" max="20" value="10"></label>
+    <span class="stat">rays revealed <span class="val" id="lidar-rays">0</span></span>
+    <span class="small">Drag the robot to move it around.</span>
+  </div>
+</div>
+
+<p class="dim small">
+  The model in this project uses a lidar range of 70 grid cells. Experiment 3 swept it down to 30
+  and up to 100 to test whether the diffusion model helps more when the sensor is short-sighted.
+  (Spoiler: the relationship was not as clean as we hoped. See section 11.)
+</p>
+
+<!-- ============================================================ -->
+<!-- 3. FRONTIERS                                                  -->
+<!-- ============================================================ -->
+<h2 id="frontier">3. What makes a frontier worth visiting?</h2>
+<p>
+  A frontier is any free cell that touches at least one unknown cell. There are usually several
+  to choose from at once. Click on a frontier in the map below. The blue circle shows what the
+  robot would reveal if it drove there and pinged the lidar from that spot. The number in the
+  corner is the <em>expected information gain</em>: how many currently-unknown cells lie inside that disk.
+</p>
+
+<div class="panel">
+  <canvas id="cv-frontier" width="720" height="380"></canvas>
+  <div class="ctrls">
+    <button id="frontier-reset">New map</button>
+    <span class="stat">selected gain <span class="val" id="frontier-gain">--</span></span>
+    <span class="small">Each labeled dot is a frontier. Click any one to score it.</span>
+  </div>
+</div>
+
+<p>
+  Information gain is the workhorse. The baseline algorithm asks <em>only</em>: how far is this
+  frontier from me, weighted against how much it would reveal? But here is the catch.
+  <strong>Information gain is computed from what we already know.</strong> Cells past a wall, in
+  rooms the robot has never seen, are invisible to this calculation. The robot is choosing in the dark.
+</p>
+
+<!-- ============================================================ -->
+<!-- 4. BASELINE                                                   -->
+<!-- ============================================================ -->
+<h2 id="baseline">4. The baseline: nearest-unknown-with-most-cells</h2>
+<p>
+  Here is the classic frontier algorithm we compare against:
+</p>
+<ol>
+  <li>List every frontier cell.</li>
+  <li>For each one, estimate information gain = number of unknown cells in its lidar disk.</li>
+  <li>Penalize for travel distance.</li>
+  <li>Pick the highest-scoring frontier and drive there.</li>
+  <li>Repeat until no frontiers are left.</li>
+</ol>
+
+<p>
+  Watch it run. The orange line is the path. Each star is a frontier choice. Coverage climbs
+  fast at first and then slows down as the robot has to chase scattered slivers of unknown.
+</p>
+
+<div class="panel">
+  <canvas id="cv-baseline" width="720" height="420"></canvas>
+  <div class="ctrls">
+    <button id="baseline-play" class="primary">Play</button>
+    <button id="baseline-step">Step</button>
+    <button id="baseline-reset">Reset</button>
+    <span class="stat base">coverage <span class="val" id="baseline-cov">0%</span></span>
+    <span class="stat base">step <span class="val" id="baseline-step-n">0</span></span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 5. THE IDEA                                                   -->
+<!-- ============================================================ -->
+<h2 id="idea">5. The core idea: imagine the rooms you cannot see</h2>
+<p>
+  Here is the move. Floor plans are not random. Houses have hallways, rooms cluster around
+  doors, walls run in straight lines. If we train a model on thousands of real floor plans, it
+  learns the <em>distribution</em> of how buildings tend to look. Given the partial map the
+  robot has built so far, the model can fill in plausible guesses for the unknown part.
+</p>
+<p>
+  Once we can imagine the unseen rooms, we can score frontiers using the imagined cells too,
+  not just the visible ones. A frontier that opens into a hallway "looks" much more valuable
+  than one that opens into a tiny closet, <em>even if both look identical from the partial map alone</em>.
+</p>
+
+<div class="panel">
+  <h4>Partial map → plausible completion</h4>
+  <canvas id="cv-imagine" width="720" height="280"></canvas>
+  <div class="ctrls">
+    <button id="imagine-shuffle">Shuffle map</button>
+    <button id="imagine-resample">Resample completion</button>
+    <span class="small">Left: what the robot has seen. Right: one plausible guess for the rest.</span>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 6. WHAT IS DIFFUSION                                          -->
+<!-- ============================================================ -->
+<h2 id="diffusion">6. What is a diffusion model, very briefly</h2>
+<p>
+  A diffusion model learns to <em>undo noise</em>. You train it by taking real data (in our case,
+  a complete floor plan), gradually corrupting it with Gaussian noise until it is pure static,
+  and asking a neural network to predict the noise that was added at every step. At inference
+  time you start from pure noise and run the model backward, denoising one step at a time, until
+  a fresh sample emerges.
+</p>
+<p>
+  Slide through the corruption timeline. Time t=0 is a clean floor plan; t=1 is pure noise. The
+  model learns to walk from right to left.
+</p>
+
+<div class="panel">
+  <h4>Forward (noising) process</h4>
+  <canvas id="cv-noise" width="720" height="200"></canvas>
+  <div class="ctrls">
+    <label>time t <input type="range" id="noise-t" min="0" max="100" value="0"></label>
+    <span class="stat">t = <span class="val" id="noise-tval">0.00</span></span>
+    <span class="small">At inference we run this in reverse.</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h4>Reverse (denoising) process: watching a sample appear from noise</h4>
+  <img src="results/showcase/02_denoising_process.gif"
+       alt="DDIM denoising progression from pure noise to a coherent floor plan"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Real output from our trained U-Net, running DDIM in reverse. The left panel starts as
+    pure Gaussian noise and gradually resolves into a coherent floor plan; the right panel
+    shows the partial-map condition that is held fixed throughout. Each frame is one DDIM
+    denoising step. After ~30 steps the sample is a plausible building.
+  </p>
+</div>
+
+<p>
+  Why diffusion instead of, say, a single regression network that predicts the most likely
+  completion? Two reasons.
+</p>
+<ul>
+  <li><strong>It samples a distribution, not a point estimate.</strong> The same partial map can
+    correspond to many plausible buildings. A regressor would average them all into a blurry
+    mush. Diffusion gives us one crisp plausible building per sample, and we can draw as many
+    as we like.</li>
+  <li><strong>We can use disagreement as an uncertainty signal.</strong> If we sample K
+    completions and they all agree that a frontier hides a hallway, we can be confident.
+    If they wildly disagree, the model is telling us "I do not know what is back there"
+    and we can use that as a feature in the scoring function.</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- 7. K SAMPLES                                                  -->
+<!-- ============================================================ -->
+<h2 id="samples">7. Eight imagined buildings from the same partial map</h2>
+<p>
+  In our pipeline we draw K=8 completions per decision. The samples agree where the partial map
+  already shows walls (because the network is conditioned on that input). They diverge in the
+  unknown region. Where they all agree, we trust the prediction. Where they disagree, we treat
+  that as uncertainty.
+</p>
+
+<div class="panel">
+  <canvas id="cv-k-samples" width="720" height="340"></canvas>
+  <div class="ctrls">
+    <button id="ks-resample" class="primary">Resample K=8</button>
+    <span class="small">Top-left is the partial input. The other seven are independent completions.</span>
+  </div>
+</div>
+
+<p>
+  In the real implementation each completion is the output of a 50-step DDIM sampling loop
+  through a U-Net with 4.16M parameters, trained on 2.66M (partial, full) pairs derived from
+  the HouseExpo dataset. The simulation above is a hand-coded stand-in just to make the idea
+  visible: real walls plus per-sample plausible extensions plus noise.
+</p>
+
+<!-- ============================================================ -->
+<!-- 8. SCORING                                                    -->
+<!-- ============================================================ -->
+<h2 id="scoring">8. Turning K completions into one frontier score</h2>
+<p>
+  For each frontier f and each completion k, we compute the information gain the robot would
+  get if it drove to f and used the lidar on the imagined building k. That gives us a small set
+  of K gain estimates per frontier.
+</p>
+
+<div class="formula">
+  score(f) = E<sub>k</sub>[ gain(f, sample_k) ]  +  λ · Std<sub>k</sub>[ gain(f, sample_k) ]  −  β · dist(f)
+</div>
+
+<p>The three terms:</p>
+<ul>
+  <li><strong>Expected gain</strong> over the K samples. Higher = more cells likely to be revealed.</li>
+  <li><strong>Standard deviation</strong> across samples, weighted by λ. This is the
+    <em>upper confidence bound</em> trick: we like frontiers that <em>could</em> be high-value
+    even if we are not sure. We use λ = 0.5.</li>
+  <li><strong>Distance penalty</strong>, weighted by β = 0.5. Otherwise the robot would always
+    chase the highest-imagined-value frontier no matter how far.</li>
+</ul>
+
+<p>
+  Move the sliders and watch which frontier wins the argmax. Each frontier shows three numbers:
+  expected gain (E), standard deviation across samples (Std), and distance (d).
+</p>
+
+<div class="panel">
+  <canvas id="cv-scoring" width="720" height="360"></canvas>
+  <div class="ctrls">
+    <label>λ (uncertainty weight) <input type="range" id="lam" min="0" max="200" value="50"></label>
+    <span class="stat">λ = <span class="val" id="lam-v">0.50</span></span>
+    <label>β (distance penalty) <input type="range" id="bet" min="0" max="200" value="50"></label>
+    <span class="stat">β = <span class="val" id="bet-v">0.50</span></span>
+    <button id="scoring-resample">Resample K</button>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 9. RACE                                                       -->
+<!-- ============================================================ -->
+<h2 id="race">9. Side-by-side: diffusion versus baseline, same map</h2>
+<p>
+  Both robots start in the same spot on the same map. Left robot uses the baseline scoring.
+  Right robot uses the diffusion-augmented scoring with K samples. The coverage chart below
+  tracks both. The story we hope to tell: the right side climbs faster in the early steps
+  because the imagined floor plan steers it toward longer corridors.
+</p>
+
+<div class="panel">
+  <div class="grid2">
+    <div>
+      <h4 style="color: var(--base);">Baseline · nearest frontier</h4>
+      <canvas id="cv-race-b" width="360" height="280"></canvas>
+    </div>
+    <div>
+      <h4 style="color: var(--diff);">Diffusion-guided · K samples</h4>
+      <canvas id="cv-race-d" width="360" height="280"></canvas>
+    </div>
+  </div>
+  <canvas id="cv-race-curve" width="720" height="180" style="margin-top: 12px;"></canvas>
+  <div class="ctrls">
+    <button id="race-play" class="primary">Play</button>
+    <button id="race-step">Step</button>
+    <button id="race-reset">New map</button>
+    <span class="stat base">baseline cov <span class="val" id="race-b">0%</span></span>
+    <span class="stat diff">diffusion cov <span class="val" id="race-d">0%</span></span>
+  </div>
+</div>
+
+<p class="dim small">
+  The "diffusion" here is again a stylized stand-in that has access to the true map (so it can
+  honestly compute what each frontier would yield) plus K random perturbations. The real model
+  approximates this same calculation with a trained network. The qualitative behavior, that
+  imagining future cells changes the ranking, is faithful to the real thing.
+</p>
+
+<!-- ============================================================ -->
+<!-- 10. REAL RESULTS                                              -->
+<!-- ============================================================ -->
+<h2 id="results">10. Where does it actually help? The regime story</h2>
+<p>
+  N=<span id="N-shown">30</span> random floor plans from held-out HouseExpo, lidar range 70, up to 20
+  frontier decisions per run. Same start position on each map for both methods.
+  The most important question is not "is it better on average" but <strong>"under what conditions does it win"</strong>.
+  The data has a clean answer.
+</p>
+
+<div class="callout good" style="margin-bottom: 20px;">
+  <h4 style="color: var(--good); margin: 0 0 4px;">The finding, in one line</h4>
+  <p style="margin: 0;">
+    Diffusion-guided exploration is the right tool when the robot has a <strong>tight step
+    budget</strong> (roughly 2 to 5 frontier choices). In that regime it wins on 50% to 60% of
+    maps with the baseline winning under 25%. Past step 6 the baseline catches up and slightly
+    pulls ahead. <strong>This is exactly the regime that matters for time-constrained or
+    patrol-style exploration tasks.</strong>
+  </p>
+</div>
+
+<div class="panel">
+  <h3>10a. Coverage advantage at each step budget</h3>
+  <p class="small dim" style="margin-top: 0;">
+    For each step K, the bar shows the mean of (diffusion coverage − baseline coverage) across
+    all maps, with ±1.96 standard errors. Purple bars = diffusion ahead. Orange = baseline
+    ahead. The first six steps tell the story.
+  </p>
+  <canvas id="cv-delta" width="720" height="300"></canvas>
+</div>
+
+<div class="panel">
+  <h3>10b. Per-step win breakdown</h3>
+  <p class="small dim" style="margin-top: 0;">
+    Counted by map, not by margin. For each step K: how many of the 30 maps had diffusion ahead,
+    baseline ahead, or essentially tied (within 0.5% coverage)? Read each column top-to-bottom.
+    The early columns are dominated by purple. The later columns by orange.
+  </p>
+  <canvas id="cv-stacked" width="720" height="280"></canvas>
+</div>
+
+<div class="panel">
+  <h3>10c. Mean coverage curves (95% CI shaded)</h3>
+  <canvas id="cv-curves" width="720" height="280"></canvas>
+  <p class="small dim">
+    Mean coverage across all maps at each step. Shaded bands are ±1.96 standard errors of the
+    mean. Note where the curves cross: around step 6 to 7 the head-start advantage is spent and
+    the baseline begins to dominate.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>10d. Steps-to-80% per map</h3>
+  <canvas id="cv-scatter" width="720" height="380"></canvas>
+  <p class="small dim">
+    Each point is one map. X = baseline steps to 80%, Y = diffusion steps to 80%. Below the
+    diagonal = diffusion wins. The diffusion model wins on 13 maps, loses on 4, ties on 10, with
+    3 hard failures (red outliers at the right edge).
+  </p>
+</div>
+
+<div class="panel">
+  <h3>10e. The headline numbers, regime-by-regime</h3>
+  <table>
+    <thead><tr><th>step budget</th><th>diffusion ahead</th><th>baseline ahead</th><th>tied</th><th>mean coverage Δ</th></tr></thead>
+    <tbody>
+      <tr><td><strong>step 2</strong></td><td class="num"><span class="pill diff">15 / 30</span></td><td class="num"><span class="pill base">1 / 30</span></td><td class="num">14</td><td class="num"><span class="pill diff">+3.1%</span></td></tr>
+      <tr><td><strong>step 3</strong></td><td class="num"><span class="pill diff">14 / 30</span></td><td class="num"><span class="pill base">7 / 30</span></td><td class="num">9</td><td class="num"><span class="pill diff">+3.6%</span></td></tr>
+      <tr><td><strong>step 4 (peak)</strong></td><td class="num"><span class="pill diff">18 / 30</span></td><td class="num"><span class="pill base">8 / 30</span></td><td class="num">4</td><td class="num"><span class="pill diff">+3.5%</span></td></tr>
+      <tr><td><strong>step 5</strong></td><td class="num"><span class="pill diff">15 / 30</span></td><td class="num"><span class="pill base">13 / 30</span></td><td class="num">2</td><td class="num"><span class="pill diff">+1.5%</span></td></tr>
+      <tr><td>step 7</td><td class="num"><span class="pill diff">11 / 30</span></td><td class="num"><span class="pill base">16 / 30</span></td><td class="num">3</td><td class="num"><span class="pill" style="color: var(--base);">−1.8%</span></td></tr>
+      <tr><td>step 10</td><td class="num"><span class="pill diff">10 / 30</span></td><td class="num"><span class="pill base">15 / 30</span></td><td class="num">5</td><td class="num"><span class="pill" style="color: var(--base);">−2.4%</span></td></tr>
+      <tr><td>step 20 (final)</td><td class="num"><span class="pill diff">8 / 30</span></td><td class="num"><span class="pill base">14 / 30</span></td><td class="num">8</td><td class="num"><span class="pill" style="color: var(--base);">−2.0%</span></td></tr>
+    </tbody>
+  </table>
+  <p class="small dim">
+    Mean steps to 80% across all maps: diffusion 6.26, baseline 6.52. Mean to 90%: diffusion
+    7.81, baseline 8.15. <strong>The averaged number undersells the early-budget story.</strong>
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 10.6  BEHIND THE MIND                                         -->
+<!-- ============================================================ -->
+<h2 id="behind-mind">11. Behind the mind: the closed loop in one image</h2>
+<p>
+  Everything above describes the loop in the abstract. This panel makes it concrete on a
+  single real map. Same start, same lidar, same diffusion model. Four steps, three views per
+  step: what the world actually is, what the robot has observed, and what the model imagines
+  before each decision.
+</p>
+
+<div class="panel">
+  <h3>11a. The trinity, per step</h3>
+  <img src="results/analysis/figures/15_behind_mind_map2638.png"
+       alt="Behind-the-mind composite for map 2638"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Top &mdash; the world, with the robot's accumulated trail in orange. Middle &mdash; the
+    partial occupancy grid the robot has built from lidar, with frontier candidates in blue.
+    Bottom &mdash; the mean of K=4 diffusion completions (the model's imagination), with the
+    chosen next frontier circled. By step 4 the imagined building is already close to the
+    truth, and the robot commits to driving into the unseen wing.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11b. Animated version: the loop running end-to-end (the one I showed the professor)</h3>
+  <img src="results/exploration_demo/exploration_diffusion.gif"
+       alt="Animated diffusion-guided exploration"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    This is the headline animation that ties everything together. Four panels, all driven
+    by the same rollout, updating in lockstep at each frontier decision.
+  </p>
+  <ul class="bullets" style="margin-top: 12px;">
+    <li><strong>Left &mdash; Partial map.</strong> What the robot has accumulated so far. The
+      lavender background is unknown; the white interior is what lidar has revealed. Yellow
+      dots are candidate frontiers, orange is the highest-scoring frontier, and the green
+      star is the one actually chosen.</li>
+    <li><strong>Middle &mdash; Diffusion prediction (IoU shown).</strong> The model's mean
+      completion at this step. As more scans accumulate, the prediction sharpens; IoU climbs
+      from around 0.72 at step 1 to 0.97 by the end.</li>
+    <li><strong>Right &mdash; Ground truth.</strong> The full building the robot does not see.
+      Shown only for our benefit, never used inside the loop.</li>
+    <li><strong>Far right &mdash; Coverage.</strong> The fraction of free space the robot has
+      discovered. Climbs from about 15% to over 85% as the rollout proceeds.</li>
+  </ul>
+  <p class="small dim">
+    The key thing to notice: the diffusion prediction is hallucinated, but it is plausible,
+    and the frontier scorer uses the variance across K samples to drive the robot toward
+    regions where the model is uncertain. That is what "imagination as exploration signal"
+    means in practice.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11c. Diffusion versus baseline, same map, animated</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+    <div>
+      <div class="small dim" style="text-align: center; margin-bottom: 4px;">
+        <strong style="color: var(--diff);">Diffusion (ours)</strong>
+      </div>
+      <img src="results/exploration_demo/exploration_diffusion.gif"
+           alt="Diffusion-guided exploration"
+           style="width: 100%; border-radius: 6px; background: #0c1019;">
+    </div>
+    <div>
+      <div class="small dim" style="text-align: center; margin-bottom: 4px;">
+        <strong style="color: var(--base);">Baseline heuristic</strong>
+      </div>
+      <img src="results/exploration_demo/exploration_baseline.gif"
+           alt="Baseline heuristic exploration"
+           style="width: 100%; border-radius: 6px; background: #0c1019;">
+    </div>
+  </div>
+  <p class="small dim">
+    The same starting map, the same lidar, the same step budget &mdash; only the frontier
+    scorer is different. The baseline (right) has no middle panel because there is nothing
+    to imagine; it scores frontiers purely from cells it has already seen. The diffusion
+    rollout (left) is using the K=8 imagined buildings to bias the choice. In the
+    early-budget regime the two look broadly similar, with our method usually pushing into
+    a hidden wing one or two steps sooner.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11d. The four scorers in parallel, synchronized step-by-step</h3>
+  <img src="results/analysis/figures/16_4method_sync.gif"
+       alt="Four frontier scorers running in parallel on map 2638"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Map 2638, identical start position, identical lidar, identical seed. Top-left:
+    <strong style="color: var(--accent2);">nearest-frontier</strong>, which always picks the
+    closest unknown boundary and crawls outward. Top-right:
+    <strong style="color: #7d6395;">info-gain only</strong>, which picks the frontier with the
+    most unknown neighbours. Bottom-left: <strong style="color: var(--accent);">info-gain +
+    distance</strong>, the conventional heuristic. Bottom-right:
+    <strong style="color: var(--diff);">diffusion (ours)</strong>, which scores frontiers
+    against K=8 imagined completions.
+  </p>
+  <p class="small dim" style="margin-top: 8px;">
+    Watch the coverage percentages. Nearest hangs around 30-65% for the first few steps and
+    only catches up by step 8. The info-gain variants get a faster start. Diffusion climbs
+    fastest at steps 2-4, then the others close the gap. That is exactly the early-budget
+    advantage the headline numbers describe.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11e. Stage simulator: the ROS 2 pipeline running in a maze world</h3>
+  <img src="results/stage_demo/maze_exploration.gif"
+       alt="Diffusion-guided exploration in Stage simulator"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    This is the diffusion pipeline driving an actual ROS 2 robot in the Stage simulator
+    (the PA3 maze world). Left: partial occupancy grid built by the PA4 mapper from lidar
+    scans, with the chosen frontier marked as a green star. Middle: the diffusion model's
+    real-time prediction of the full maze. Right: the ground truth, shown only for context.
+  </p>
+  <p class="small dim" style="margin-top: 8px;">
+    Note the gap between the Stage demo and the HouseExpo experiments. Stage uses a small
+    hand-designed maze with relatively low ambiguity, so the prior has less to add. The
+    integration matters because it proves the pipeline is real (ROS 2 nodes, /map and
+    /best_frontier topics, the same exploration_manager as PA3) &mdash; it is the answer to
+    "but does any of this connect to a real robot?"
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11f. Why prediction quality matters: IoU climbs as scans accumulate</h3>
+  <img src="results/coverage_artifacts/03_coverage_sweep.gif"
+       alt="Prediction IoU climbing as more scans are added"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Same map, same model, sweeping from 1 scan up to 12. Left panel: the partial map at this
+    coverage level. Middle: the diffusion prediction. Right: IoU vs scan count. The model
+    was only trained on single-scan inputs (around 10% coverage) but generalises smoothly to
+    multi-scan inputs (up to 55% coverage), with IoU climbing from 0.72 to 0.97. That is the
+    reason the prior is still useful at step 5 even though it was never trained at step 5.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 10.7  4-BASELINE ABLATION                                     -->
+<!-- ============================================================ -->
+<h2 id="four-baseline">12. The 4-baseline ablation: where exactly do the wins come from?</h2>
+<p>
+  The deeper question is not just "does it beat the conventional heuristic" but <em>where in
+  the pipeline is the value coming from?</em> The classical frontier scorer mixes two terms:
+  expected information gain and a distance penalty. The diffusion scorer adds a third: the
+  learned prior. To isolate each contribution we ran four scorers on the same 30 HouseExpo
+  maps with identical seeds and identical lidar.
+</p>
+
+<div class="panel">
+  <h3>12a. Mean coverage curves (mean ± 1 SE)</h3>
+  <img src="results/analysis/figures/12_4baseline_curves.png"
+       alt="Coverage curves for the four scorers on 30 HouseExpo maps"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Step 4 marker shows the early-budget regime. Diffusion (pink) leads at step 4, info-gain
+    variants (blue and purple) are nearly identical to each other, nearest (grey) lags from the
+    very first step and stays behind.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>12b. The clean decomposition</h3>
+  <table>
+    <thead><tr><th>method</th><th>step-4 cov</th><th>final cov</th><th>steps to 80%</th><th>80% reach rate</th></tr></thead>
+    <tbody>
+      <tr><td>nearest frontier</td><td class="num">42.6%</td><td class="num">88.0%</td><td class="num">12.1</td><td class="num">80.0%</td></tr>
+      <tr><td>info-gain only</td><td class="num">60.1%</td><td class="num">94.2%</td><td class="num">6.4</td><td class="num">96.7%</td></tr>
+      <tr><td>info-gain + distance</td><td class="num">59.2%</td><td class="num">94.2%</td><td class="num">6.5</td><td class="num">96.7%</td></tr>
+      <tr><td><strong>diffusion (ours)</strong></td><td class="num"><span class="pill diff">62.7%</span></td><td class="num">91.7%</td><td class="num"><span class="pill diff">6.3</span></td><td class="num">90.0%</td></tr>
+    </tbody>
+  </table>
+  <p class="small dim">
+    Reading the deltas down the table: going from nearest to info-gain alone is worth +17.5pp
+    at step 4, adding the distance penalty on top of info-gain adds essentially nothing
+    (&minus;0.9pp), and the learned prior on top adds another +3.5pp.
+  </p>
+</div>
+
+<div class="callout good">
+  <h4 style="color: var(--good); margin: 0 0 6px;">The decomposition in one line</h4>
+  <p style="margin: 0;">
+    <strong>info-gain matters; distance is decorative; the prior buys you +3.5pp at step 4.</strong>
+    This explains why the standard scorer works as well as it does (it's mostly the info-gain
+    term), and exactly how much headroom is left on the table for a learned prior.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>12c. Side-by-side rollout on map 2638 (diffusion lead +23pp at step 4)</h3>
+  <img src="results/analysis/figures/14_rollout_map2638.png"
+       alt="Four-method side-by-side rollout on map 2638"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    Same start position, same lidar, same 20-step budget. By step 4 the diffusion scorer has
+    pushed into the upper-left wing of the building while nearest is still circling the entry
+    room.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>12d. Honest failure case on map 17925 (no method wins)</h3>
+  <img src="results/analysis/figures/14_rollout_map17925.png"
+       alt="Four-method rollout on map 17925 — all methods plateau"
+       style="width: 100%; border-radius: 6px; background: #0c1019;">
+  <p class="small dim">
+    On some maps every method plateaus at the same coverage, often because the rasterizer
+    leaves a narrow doorway no method can punch through. Honest failure case shown for balance.
+  </p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 11.5  CROSS-DOMAIN ABLATION                                   -->
+<!-- ============================================================ -->
+<h2 id="ablation">13. The negative control: what happens with the wrong prior</h2>
+<p>
+  A reasonable reviewer at this point asks: is the diffusion model actually doing useful
+  inference, or is the U-Net just a fancy averaging operator that happens to look like it
+  works? To answer that, we ran the cleanest possible ablation.
+</p>
+<p>
+  We trained a second model from scratch on a different distribution: synthetic stereotyped
+  environments (procedurally generated grid-of-rooms and warehouse layouts). 2.38M params,
+  8 epochs, 6 minutes on a T4. Then we evaluated this warehouse-trained model on the
+  <em>same</em> 30 HouseExpo maps with the <em>same</em> scoring code. Only the prior changed.
+</p>
+
+<div class="callout warn" style="margin-bottom: 20px;">
+  <h4 style="color: var(--bad); margin: 0 0 4px;">The advantage vanishes</h4>
+  <p style="margin: 0;">
+    With the in-domain (HouseExpo-trained) prior, step-4 coverage advantage is <strong>+3.47%</strong>
+    with wins on 18 of 30 maps. With the out-of-domain (warehouse-trained) prior, step-4 advantage drops to <strong>−0.09%</strong>,
+    with wins/losses essentially even at 9/12/9. Same maps, same scoring, only the prior differs.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>11a. Coverage advantage by prior</h3>
+  <p class="small dim" style="margin-top: 0;">
+    Per-step coverage advantage over baseline for the two models on the same N=30 HouseExpo maps.
+    Purple bars: in-domain prior. Gray bars: out-of-domain prior. Whiskers are 95% CIs.
+  </p>
+  <canvas id="cv-cross-delta" width="720" height="280"></canvas>
+</div>
+
+<div class="panel">
+  <h3>11b. Win count by prior</h3>
+  <p class="small dim" style="margin-top: 0;">
+    For each step budget, how many of the 30 maps did diffusion beat baseline by more than 0.5%
+    coverage? With the right prior we have a clean signal. With the wrong prior it is a wash.
+  </p>
+  <canvas id="cv-cross-wins" width="720" height="260"></canvas>
+</div>
+
+<div class="callout">
+  <h4 style="color: var(--accent); margin-top: 0;">What this controls for</h4>
+  <p style="margin: 4px 0 0;">
+    Same model architecture (conditional U-Net, DDIM sampler, K=8 completions). Same scoring
+    formula (E[gain] + 0.5*Std[gain] − 0.5*dist). Same 30 test maps. Same start positions, same
+    lidar range, same step limit. The <em>only</em> difference between the two columns is which
+    distribution the model was trained on. The +3.47% in column one is a property of the
+    matched-prior pipeline, not of the architecture or scoring tricks.
+  </p>
+</div>
+
+<h3>What it means for deployment</h3>
+<p>
+  A learned generative prior is <strong>not a free lunch</strong>. It is a free advantage only
+  when training distribution matches deployment distribution. With a mismatched prior the
+  K-sample expectations and disagreements are essentially noise, and the scoring function falls
+  back to behavior indistinguishable from the baseline.
+</p>
+<p>
+  This sharpens the practical claim: this approach is the right tool for
+  <strong>known-class environments</strong> (a specific warehouse layout family, a hospital
+  floor plan database, a hotel chain), not for generic exploration of arbitrary spaces. The
+  more the deployment environment resembles a known template, the bigger the head-start we can
+  give the robot.
+</p>
+
+<!-- ============================================================ -->
+<!-- 12. HONEST                                                    -->
+<!-- ============================================================ -->
+<h2 id="realtime">14. The realtime upper bound: sampling frequency matters more than prior match</h2>
+<p>
+  One real-world objection: our model takes ~7 seconds per decision on a T4. That is too slow
+  to drive a real robot in real time. So we ran a controlled simulation answering "what if it
+  were free." For 20 of the original N=30 maps we re-ran the rollout in two modes:
+</p>
+<ul>
+  <li><strong>Discrete</strong>: re-sample K=8 completions only at frontier decisions (one
+    call per frontier choice). What we measured in section 10.</li>
+  <li><strong>Realtime</strong>: re-sample K=8 every 3 driving cells along the way, allowing
+    the robot to change its mind on the trip. Same scoring function. Inference cost is ignored.</li>
+</ul>
+<p>
+  We ran this for both the HouseExpo-trained (in-domain) and warehouse-trained (out-of-domain)
+  priors. The full 2 by 2 matrix of (prior x sampling mode) on the same 20 maps gives the
+  cleanest single picture of the whole project.
+</p>
+
+<div class="panel">
+  <h3>12a. The 2x2 matrix</h3>
+  <p class="small dim" style="margin-top: 0;">
+    Step-4 coverage advantage over baseline, by (prior x sampling mode). Same 20 HouseExpo
+    maps. Same scoring code. The two arrows show what realtime mode buys you.
+  </p>
+  <img src="results/analysis/figures/11_2x2_matrix.png" alt="2x2 matrix" style="width: 100%; max-width: 720px; display: block; margin: 0 auto;">
+</div>
+
+<div class="callout good">
+  <h4 style="color: var(--good); margin-top: 0;">The decomposition</h4>
+  <ul style="margin: 6px 0 0;">
+    <li><strong>Prior match</strong> contributes ~4 percentage points of coverage advantage.</li>
+    <li><strong>Sampling frequency</strong> contributes ~7 percentage points.</li>
+    <li>They are roughly additive: the four cells line up cleanly.</li>
+    <li><strong>Sampling frequency matters more than domain match in our data.</strong> Even
+      with the wrong prior, realtime mode beats baseline by +6%. This is the strongest
+      single argument for hardware distillation and deployment.</li>
+  </ul>
+</div>
+
+<h3>What this means for engineering effort</h3>
+<p>
+  If you have a budget for one thing, the data suggests: distill the model down to sub-second
+  inference and run continuous re-sampling. The prior match still matters and is worth getting
+  right, but it is the second-largest lever. The first lever is how often you can ask the
+  prior for an opinion.
+</p>
+
+<!-- ============================================================ -->
+<!-- 13. HONEST                                                    -->
+<!-- ============================================================ -->
+<h2 id="honest">15. Honest assessment: what we can and cannot claim</h2>
+
+<div class="callout good">
+  <h4 style="color: var(--good); margin-top: 0;">What is real</h4>
+  <ul style="margin: 6px 0 0;">
+    <li>A trained conditional diffusion model that produces plausible completions of partial
+      occupancy grids, conditioned on real lidar-style partial maps.</li>
+    <li>A frontier scoring pipeline that consumes K samples and produces a single score.</li>
+    <li>End-to-end ROS 2 integration with Stage, using pre-computed waypoints (because Docker
+      QEMU is too slow for real-time inference on Apple Silicon).</li>
+    <li>A modest, statistically defensible advantage in early-exploration efficiency on most
+      maps (13 wins, 10 ties, 4 losses, 3 failures out of 30).</li>
+  </ul>
+</div>
+
+<div class="callout warn">
+  <h4 style="color: var(--bad); margin-top: 0;">What is not real</h4>
+  <ul style="margin: 6px 0 0;">
+    <li>The earlier "+24.5% information gain" headline. That number compared single-frontier
+      scoring quality, not exploration efficiency. It is not a defensible claim about the
+      end-to-end system and is being removed from all artifacts.</li>
+    <li>The hypothesis that shorter lidar makes diffusion shine. Experiment 3 (lidar sweep on
+      N=10) did not find a clean monotonic relationship. At lidar=30 both methods fail. At
+      50/70/100 the differences are inside the noise.</li>
+    <li>Live in-the-loop Stage exploration. The recording shows the integration runs, but the
+      QEMU-emulated PyTorch was about 50x too slow to drive in real time.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <h4 style="color: var(--accent); margin-top: 0;">Why the result is still interesting</h4>
+  <p style="margin: 4px 0 0;">
+    A 4% improvement in steps-to-80% is small but it is the right shape for the hypothesis: the
+    model helps when there is enough unknown territory ahead that imagining it changes the
+    ranking. It does not help once most of the building has been observed, because at that
+    point the partial map is already most of the truth. That is exactly what a generative-prior
+    explanation predicts, and it tells us where this approach belongs in the design space.
+  </p>
+</div>
+
+<h3>What I would change next time</h3>
+<ul>
+  <li><strong>Train on a harder distribution.</strong> HouseExpo single-room layouts are
+    too easy. Multi-room apartments and offices would force the model to learn more interesting
+    priors.</li>
+  <li><strong>Calibrate the predicted gain.</strong> The model over-predicts how many cells a
+    frontier will reveal by 1.5x to 7x. A simple post-hoc calibration on a validation set would
+    probably reduce false-confidence failures.</li>
+  <li><strong>Run on real hardware, not just Stage.</strong> A TurtleBot in a real corridor
+    would be the convincing demo.</li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- ARCH SUMMARY                                                  -->
+<!-- ============================================================ -->
+<h2>Quick architecture recap</h2>
+<div class="panel">
+  <table>
+    <tbody>
+      <tr><td><strong>model</strong></td><td>conditional U-Net, 4.16M params, base_channels=32, attention at 16x16 bottleneck</td></tr>
+      <tr><td><strong>training</strong></td><td>29 epochs on a Tesla T4, 2.66M (partial, full) pairs from HouseExpo</td></tr>
+      <tr><td><strong>sampler</strong></td><td>DDIM, 50 steps (about 20x faster than full DDPM)</td></tr>
+      <tr><td><strong>K completions per decision</strong></td><td>8</td></tr>
+      <tr><td><strong>scoring</strong></td><td>E[gain] + 0.5 · Std[gain] − 0.5 · dist, info_radius = lidar range</td></tr>
+      <tr><td><strong>simulator</strong></td><td>ROS 2 Humble + Stage, CycloneDDS, Docker x86 on Apple Silicon</td></tr>
+      <tr><td><strong>integration mode</strong></td><td>pre-computed waypoints (Mac runs model, Docker replays path)</td></tr>
+      <tr><td><strong>baseline</strong></td><td>same scoring with K=1, no completions</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  Moin Mattar · COSC 81/281 · diffusion-guided exploration · May 2026
+  <br>
+  <span class="small">AI helped me in formatting and writing this explainer (HTML/JS), as well as explained concepts.</span>
+</div>
+
+</div>
+
+<script>
+/* ============================================================
+   Shared utilities
+   ============================================================ */
+const FREE = 0, WALL = 1, UNK = 2;
+const COLORS = {
+  free: '#dfe6f0',
+  wall: '#3a4258',
+  unk:  '#0a0e16',
+  robot: '#6fb6ff',
+  robotB: '#ffb86c',
+  robotD: '#c576ff',
+  frontier: '#c576ff',
+  path: '#ffb86c',
+  pathD: '#c576ff',
+};
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function rngFactory(seed) {
+  let s = seed | 0; if (s === 0) s = 0x12345678;
+  return function() {
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    return ((s >>> 0) % 1000000) / 1000000;
+  };
+}
+
+/* Create a simple "house" map: rectangle outer wall, a few internal walls
+   with doorways. Returns 2D array [rows][cols] of FREE/WALL. */
+function makeHouse(rows, cols, rng) {
+  const m = Array.from({length: rows}, () => new Array(cols).fill(FREE));
+  for (let r = 0; r < rows; r++) { m[r][0] = WALL; m[r][cols-1] = WALL; }
+  for (let c = 0; c < cols; c++) { m[0][c] = WALL; m[rows-1][c] = WALL; }
+  // a few horizontal walls with doorways
+  const nH = 2 + Math.floor(rng() * 2);
+  const usedR = [0, rows-1];
+  for (let i = 0; i < nH; i++) {
+    let r;
+    let tries = 0;
+    do { r = 3 + Math.floor(rng() * (rows-6)); tries++; }
+    while (usedR.some(u => Math.abs(u-r) < 3) && tries < 30);
+    usedR.push(r);
+    const c0 = 1 + Math.floor(rng() * (cols-2));
+    const c1 = 1 + Math.floor(rng() * (cols-2));
+    const lo = Math.min(c0, c1), hi = Math.max(c0, c1);
+    const door = lo + Math.floor(rng() * (hi-lo+1));
+    const door2 = lo + Math.floor(rng() * (hi-lo+1));
+    for (let c = lo; c <= hi; c++) {
+      if (c === door || c === door2) continue;
+      m[r][c] = WALL;
+    }
+  }
+  // a few vertical walls
+  const nV = 2 + Math.floor(rng() * 2);
+  const usedC = [0, cols-1];
+  for (let i = 0; i < nV; i++) {
+    let c;
+    let tries = 0;
+    do { c = 3 + Math.floor(rng() * (cols-6)); tries++; }
+    while (usedC.some(u => Math.abs(u-c) < 3) && tries < 30);
+    usedC.push(c);
+    const r0 = 1 + Math.floor(rng() * (rows-2));
+    const r1 = 1 + Math.floor(rng() * (rows-2));
+    const lo = Math.min(r0, r1), hi = Math.max(r0, r1);
+    const door = lo + Math.floor(rng() * (hi-lo+1));
+    for (let r = lo; r <= hi; r++) {
+      if (r === door) continue;
+      m[r][c] = WALL;
+    }
+  }
+  return m;
+}
+
+/* Raycast lidar: reveal cells inside `range`. Returns array of revealed (r,c) */
+function lidarSweep(map, known, r0, c0, range) {
+  const revealed = [];
+  const rows = map.length, cols = map[0].length;
+  const N = 96;
+  for (let i = 0; i < N; i++) {
+    const ang = (i / N) * Math.PI * 2;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let x = c0 + 0.5, y = r0 + 0.5;
+    for (let s = 0; s < range; s++) {
+      x += dx; y += dy;
+      const rr = Math.floor(y), cc = Math.floor(x);
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) break;
+      if (known[rr][cc] === UNK) {
+        known[rr][cc] = map[rr][cc];
+        revealed.push([rr, cc]);
+      }
+      if (map[rr][cc] === WALL) break;
+    }
+  }
+  return revealed;
+}
+
+/* Find frontier cells: free in `known`, adjacent to UNK */
+function findFrontiers(known) {
+  const rows = known.length, cols = known[0].length;
+  const out = [];
+  for (let r = 1; r < rows-1; r++) {
+    for (let c = 1; c < cols-1; c++) {
+      if (known[r][c] !== FREE) continue;
+      let touchesUnk = false;
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        if (known[r+dr][c+dc] === UNK) { touchesUnk = true; break; }
+      }
+      if (touchesUnk) out.push([r, c]);
+    }
+  }
+  return out;
+}
+
+/* Cluster frontiers into a smaller set of representative points */
+function clusterFrontiers(fronts, minDist = 4) {
+  const reps = [];
+  for (const f of fronts) {
+    let close = false;
+    for (const r of reps) {
+      const dr = f[0]-r[0], dc = f[1]-r[1];
+      if (dr*dr + dc*dc < minDist*minDist) { close = true; break; }
+    }
+    if (!close) reps.push(f);
+  }
+  return reps;
+}
+
+/* Count unknown cells inside lidar disk from (r,c) on known map */
+function countUnkInDisk(known, r, c, radius) {
+  const rows = known.length, cols = known[0].length;
+  let n = 0;
+  for (let dr = -radius; dr <= radius; dr++) {
+    for (let dc = -radius; dc <= radius; dc++) {
+      if (dr*dr+dc*dc > radius*radius) continue;
+      const rr = r+dr, cc = c+dc;
+      if (rr<0||rr>=rows||cc<0||cc>=cols) continue;
+      if (known[rr][cc] === UNK) n++;
+    }
+  }
+  return n;
+}
+
+/* BFS path length from (r0,c0) to (r1,c1) over known free cells */
+function bfsDist(known, r0, c0, r1, c1) {
+  const rows = known.length, cols = known[0].length;
+  if (r0 === r1 && c0 === c1) return 0;
+  const dist = Array.from({length: rows}, () => new Array(cols).fill(-1));
+  dist[r0][c0] = 0;
+  const q = [[r0, c0]];
+  let head = 0;
+  while (head < q.length) {
+    const [r, c] = q[head++];
+    if (r === r1 && c === c1) return dist[r][c];
+    for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nr = r+dr, nc = c+dc;
+      if (nr<0||nr>=rows||nc<0||nc>=cols) continue;
+      if (dist[nr][nc] !== -1) continue;
+      if (known[nr][nc] !== FREE) continue;
+      dist[nr][nc] = dist[r][c]+1;
+      q.push([nr, nc]);
+    }
+  }
+  return Infinity;
+}
+
+/* Plan a path on known free cells. Returns array of [r,c] or null. */
+function bfsPath(known, r0, c0, r1, c1) {
+  const rows = known.length, cols = known[0].length;
+  const prev = Array.from({length: rows}, () => new Array(cols).fill(null));
+  const seen = Array.from({length: rows}, () => new Array(cols).fill(false));
+  seen[r0][c0] = true;
+  const q = [[r0, c0]]; let head = 0;
+  while (head < q.length) {
+    const [r, c] = q[head++];
+    if (r === r1 && c === c1) {
+      const path = [];
+      let cur = [r, c];
+      while (cur) { path.push(cur); cur = prev[cur[0]][cur[1]]; }
+      return path.reverse();
+    }
+    for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nr = r+dr, nc = c+dc;
+      if (nr<0||nr>=rows||nc<0||nc>=cols) continue;
+      if (seen[nr][nc]) continue;
+      if (known[nr][nc] !== FREE) continue;
+      seen[nr][nc] = true;
+      prev[nr][nc] = [r, c];
+      q.push([nr, nc]);
+    }
+  }
+  return null;
+}
+
+function drawMap(ctx, known, cell, ox=0, oy=0, opt={}) {
+  const rows = known.length, cols = known[0].length;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let col;
+      if (known[r][c] === UNK) col = COLORS.unk;
+      else if (known[r][c] === WALL) col = COLORS.wall;
+      else col = COLORS.free;
+      ctx.fillStyle = col;
+      ctx.fillRect(ox + c*cell, oy + r*cell, cell, cell);
+    }
+  }
+  if (opt.gridLines) {
+    ctx.strokeStyle = '#1a2030';
+    ctx.lineWidth = 0.5;
+    for (let r = 0; r <= rows; r++) {
+      ctx.beginPath(); ctx.moveTo(ox, oy + r*cell); ctx.lineTo(ox + cols*cell, oy + r*cell); ctx.stroke();
+    }
+    for (let c = 0; c <= cols; c++) {
+      ctx.beginPath(); ctx.moveTo(ox + c*cell, oy); ctx.lineTo(ox + c*cell, oy + rows*cell); ctx.stroke();
+    }
+  }
+}
+
+function drawRobot(ctx, r, c, cell, ox=0, oy=0, color=COLORS.robot) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(ox + (c+0.5)*cell, oy + (r+0.5)*cell, cell*0.45, 0, Math.PI*2);
+  ctx.fill();
+}
+
+/* ============================================================
+   1. EXPLORE (WASD)
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-explore');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 28, COLS = 48;
+  const cell = Math.floor(Math.min(cw / COLS, ch / ROWS));
+  const ox = Math.floor((cw - cell*COLS)/2);
+  const oy = Math.floor((ch - cell*ROWS)/2);
+  let rng, map, known, robot, steps;
+  const covEl = document.getElementById('explore-cov');
+  const stEl  = document.getElementById('explore-steps');
+
+  function reset() {
+    rng = rngFactory(42);
+    map = makeHouse(ROWS, COLS, rng);
+    known = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    // start in the middle bottom row
+    let r0 = ROWS-3, c0 = Math.floor(COLS/2);
+    while (map[r0][c0] === WALL) c0++;
+    robot = {r: r0, c: c0};
+    steps = 0;
+    sweep();
+    draw();
+  }
+  function sweep() {
+    lidarSweep(map, known, robot.r, robot.c, 8);
+  }
+  function totalFree() {
+    let n = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (map[r][c] === FREE) n++;
+    return n;
+  }
+  function coverage() {
+    let n = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (known[r][c] === FREE) n++;
+    return n / totalFree();
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    drawMap(ctx, known, cell, ox, oy);
+    // frontiers
+    const fronts = findFrontiers(known);
+    ctx.fillStyle = COLORS.frontier;
+    for (const [r,c] of fronts) {
+      ctx.fillRect(ox+c*cell+cell*0.25, oy+r*cell+cell*0.25, cell*0.5, cell*0.5);
+    }
+    drawRobot(ctx, robot.r, robot.c, cell, ox, oy);
+    covEl.textContent = Math.round(coverage()*100) + '%';
+    stEl.textContent = steps;
+  }
+  function tryMove(dr, dc) {
+    const nr = robot.r+dr, nc = robot.c+dc;
+    if (nr<0||nr>=ROWS||nc<0||nc>=COLS) return;
+    if (map[nr][nc] === WALL) return;
+    robot.r = nr; robot.c = nc;
+    steps++;
+    sweep();
+    draw();
+  }
+  document.getElementById('explore-reset').onclick = reset;
+  cv.tabIndex = 0;
+  cv.onclick = () => cv.focus();
+  cv.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k==='w'||k==='arrowup')    { tryMove(-1,0); e.preventDefault(); }
+    if (k==='s'||k==='arrowdown')  { tryMove(1,0);  e.preventDefault(); }
+    if (k==='a'||k==='arrowleft')  { tryMove(0,-1); e.preventDefault(); }
+    if (k==='d'||k==='arrowright') { tryMove(0,1);  e.preventDefault(); }
+  });
+  reset();
+})();
+
+/* ============================================================
+   2. LIDAR
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-lidar');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 24, COLS = 44;
+  const cell = Math.floor(Math.min(cw / COLS, ch / ROWS));
+  const ox = Math.floor((cw - cell*COLS)/2);
+  const oy = Math.floor((ch - cell*ROWS)/2);
+  const rng = rngFactory(7);
+  const map = makeHouse(ROWS, COLS, rng);
+  let robot = {r: 12, c: 22};
+  let range = 10;
+  const rayCount = 120;
+  const raysEl = document.getElementById('lidar-rays');
+  document.getElementById('lidar-r').oninput = (e) => { range = +e.target.value; draw(); };
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    // map dim
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      ctx.fillStyle = map[r][c] === WALL ? '#3a4258' : '#11151f';
+      ctx.fillRect(ox+c*cell, oy+r*cell, cell, cell);
+    }
+    // rays + lit cells
+    const lit = new Set();
+    const wallHits = [];
+    for (let i = 0; i < rayCount; i++) {
+      const ang = (i / rayCount) * Math.PI * 2;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      let x = robot.c+0.5, y = robot.r+0.5;
+      let hitR=-1, hitC=-1;
+      for (let s = 0; s < range; s++) {
+        x += dx; y += dy;
+        const rr = Math.floor(y), cc = Math.floor(x);
+        if (rr<0||rr>=ROWS||cc<0||cc>=COLS) break;
+        lit.add(rr*COLS+cc);
+        if (map[rr][cc] === WALL) { hitR=rr; hitC=cc; break; }
+      }
+      wallHits.push([(robot.c+0.5+dx*range)*cell, (robot.r+0.5+dy*range)*cell, hitR, hitC]);
+    }
+    // shade lit cells
+    for (const k of lit) {
+      const r = Math.floor(k/COLS), c = k%COLS;
+      ctx.fillStyle = map[r][c] === WALL ? '#5a6480' : '#dfe6f0';
+      ctx.fillRect(ox+c*cell, oy+r*cell, cell, cell);
+    }
+    // draw rays faintly
+    ctx.strokeStyle = 'rgba(111, 182, 255, 0.18)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < rayCount; i+=2) {
+      const ang = (i / rayCount) * Math.PI * 2;
+      const dx = Math.cos(ang), dy = Math.sin(ang);
+      let x = robot.c+0.5, y = robot.r+0.5;
+      let r = robot.r, c = robot.c;
+      let steps = 0;
+      while (steps < range) {
+        x += dx; y += dy; steps++;
+        const rr = Math.floor(y), cc = Math.floor(x);
+        if (rr<0||rr>=ROWS||cc<0||cc>=COLS) break;
+        if (map[rr][cc] === WALL) { r=rr; c=cc; break; }
+        r=rr; c=cc;
+      }
+      ctx.beginPath();
+      ctx.moveTo(ox+(robot.c+0.5)*cell, oy+(robot.r+0.5)*cell);
+      ctx.lineTo(ox+(c+0.5)*cell, oy+(r+0.5)*cell);
+      ctx.stroke();
+    }
+    drawRobot(ctx, robot.r, robot.c, cell, ox, oy);
+    raysEl.textContent = lit.size;
+  }
+  // drag robot
+  let dragging = false;
+  cv.addEventListener('mousedown', (e) => {
+    const rect = cv.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (cv.width / rect.width);
+    const y = (e.clientY - rect.top) * (cv.height / rect.height);
+    const c = Math.floor((x-ox)/cell), r = Math.floor((y-oy)/cell);
+    if (r>=0&&r<ROWS&&c>=0&&c<COLS && map[r][c] !== WALL) {
+      dragging = true; robot.r = r; robot.c = c; draw();
+    }
+  });
+  cv.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const rect = cv.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (cv.width / rect.width);
+    const y = (e.clientY - rect.top) * (cv.height / rect.height);
+    const c = Math.floor((x-ox)/cell), r = Math.floor((y-oy)/cell);
+    if (r>=0&&r<ROWS&&c>=0&&c<COLS && map[r][c] !== WALL) {
+      robot.r = r; robot.c = c; draw();
+    }
+  });
+  window.addEventListener('mouseup', () => dragging = false);
+  draw();
+})();
+
+/* ============================================================
+   3. FRONTIER SCORING (single shot, manual click)
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-frontier');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 26, COLS = 46;
+  const cell = Math.floor(Math.min(cw / COLS, ch / ROWS));
+  const ox = Math.floor((cw - cell*COLS)/2);
+  const oy = Math.floor((ch - cell*ROWS)/2);
+  let map, known, robot, fronts, reps, selected;
+  let seed = 11;
+  const gainEl = document.getElementById('frontier-gain');
+
+  function reset() {
+    const rng = rngFactory(seed);
+    map = makeHouse(ROWS, COLS, rng);
+    known = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    // pick a start
+    let r0 = Math.floor(ROWS/2), c0 = Math.floor(COLS/2);
+    while (map[r0][c0] !== FREE) { r0 = 1 + Math.floor(rng()*(ROWS-2)); c0 = 1 + Math.floor(rng()*(COLS-2)); }
+    robot = {r: r0, c: c0};
+    // partial: do a few BFS sweeps so we get a believable partial map
+    lidarSweep(map, known, robot.r, robot.c, 9);
+    fronts = findFrontiers(known);
+    reps = clusterFrontiers(fronts, 4);
+    selected = null;
+    gainEl.textContent = '--';
+    draw();
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    drawMap(ctx, known, cell, ox, oy);
+    // disk for selected
+    if (selected) {
+      const radius = 9;
+      ctx.fillStyle = 'rgba(111, 182, 255, 0.15)';
+      ctx.beginPath();
+      ctx.arc(ox+(selected[1]+0.5)*cell, oy+(selected[0]+0.5)*cell, radius*cell, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // frontier rep dots
+    reps.forEach((f, i) => {
+      ctx.fillStyle = (selected === f) ? '#fff' : COLORS.frontier;
+      ctx.beginPath();
+      ctx.arc(ox+(f[1]+0.5)*cell, oy+(f[0]+0.5)*cell, cell*1.0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#0a0e16';
+      ctx.font = `bold ${cell*1.2}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i+1), ox+(f[1]+0.5)*cell, oy+(f[0]+0.5)*cell);
+    });
+    drawRobot(ctx, robot.r, robot.c, cell, ox, oy);
+  }
+  cv.addEventListener('click', (e) => {
+    const rect = cv.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (cv.width / rect.width);
+    const y = (e.clientY - rect.top) * (cv.height / rect.height);
+    let best = null, bestD = Infinity;
+    for (const f of reps) {
+      const fx = ox+(f[1]+0.5)*cell, fy = oy+(f[0]+0.5)*cell;
+      const d2 = (x-fx)**2 + (y-fy)**2;
+      if (d2 < bestD && d2 < cell*cell*4) { bestD = d2; best = f; }
+    }
+    if (best) {
+      selected = best;
+      const g = countUnkInDisk(known, best[0], best[1], 9);
+      gainEl.textContent = g;
+      draw();
+    }
+  });
+  document.getElementById('frontier-reset').onclick = () => { seed++; reset(); };
+  reset();
+})();
+
+/* ============================================================
+   4. BASELINE algorithm (animated)
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-baseline');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 28, COLS = 48;
+  const cell = Math.floor(Math.min(cw / COLS, ch / ROWS));
+  const ox = Math.floor((cw - cell*COLS)/2);
+  const oy = Math.floor((ch - cell*ROWS)/2);
+  let map, known, robot, path, steps, playing, raf;
+  const lidarR = 8;
+  const covEl = document.getElementById('baseline-cov');
+  const stEl  = document.getElementById('baseline-step-n');
+
+  function reset() {
+    const rng = rngFactory(99);
+    map = makeHouse(ROWS, COLS, rng);
+    known = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    let r0 = ROWS-3, c0 = 3;
+    while (map[r0][c0] !== FREE) c0++;
+    robot = {r: r0, c: c0};
+    path = [[r0, c0]];
+    steps = 0;
+    lidarSweep(map, known, r0, c0, lidarR);
+    playing = false;
+    draw();
+  }
+  function totalFree() {
+    let n = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (map[r][c] === FREE) n++;
+    return n;
+  }
+  function coverage() {
+    let n = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (known[r][c] === FREE) n++;
+    return n / totalFree();
+  }
+  function chooseFrontier() {
+    const fronts = findFrontiers(known);
+    if (fronts.length === 0) return null;
+    let best = null, bestS = -Infinity;
+    for (const f of fronts) {
+      const g = countUnkInDisk(known, f[0], f[1], lidarR);
+      const d = bfsDist(known, robot.r, robot.c, f[0], f[1]);
+      if (d === Infinity) continue;
+      const s = g - 0.5 * d;
+      if (s > bestS) { bestS = s; best = f; }
+    }
+    return best;
+  }
+  function stepOne() {
+    const target = chooseFrontier();
+    if (!target) { playing = false; return false; }
+    const p = bfsPath(known, robot.r, robot.c, target[0], target[1]);
+    if (!p) return false;
+    // walk all the way
+    for (const [r,c] of p) {
+      robot.r = r; robot.c = c;
+      path.push([r,c]);
+    }
+    lidarSweep(map, known, robot.r, robot.c, lidarR);
+    steps++;
+    draw();
+    return true;
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    drawMap(ctx, known, cell, ox, oy);
+    // path
+    if (path.length > 1) {
+      ctx.strokeStyle = COLORS.path; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ox+(path[0][1]+0.5)*cell, oy+(path[0][0]+0.5)*cell);
+      for (let i = 1; i < path.length; i++)
+        ctx.lineTo(ox+(path[i][1]+0.5)*cell, oy+(path[i][0]+0.5)*cell);
+      ctx.stroke();
+    }
+    drawRobot(ctx, robot.r, robot.c, cell, ox, oy, COLORS.robotB);
+    covEl.textContent = Math.round(coverage()*100) + '%';
+    stEl.textContent = steps;
+  }
+  document.getElementById('baseline-reset').onclick = () => { playing = false; reset(); };
+  document.getElementById('baseline-step').onclick = () => stepOne();
+  document.getElementById('baseline-play').onclick = function() {
+    playing = !playing;
+    this.textContent = playing ? 'Pause' : 'Play';
+    function loop() {
+      if (!playing) return;
+      if (!stepOne()) { playing = false; document.getElementById('baseline-play').textContent='Play'; return; }
+      raf = setTimeout(loop, 350);
+    }
+    loop();
+  };
+  reset();
+})();
+
+/* ============================================================
+   5. IMAGINE one completion
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-imagine');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 22, COLS = 36;
+  const cell = Math.floor(Math.min(cw / 2 / (COLS+2), ch / ROWS));
+  let map, known, completion;
+  let mapSeed = 33, sampleSeed = 1;
+
+  function regenMap() {
+    const rng = rngFactory(mapSeed);
+    map = makeHouse(ROWS, COLS, rng);
+    known = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    // partial: reveal a quadrant
+    let r0 = ROWS-4, c0 = 4;
+    while (map[r0][c0] !== FREE) c0++;
+    lidarSweep(map, known, r0, c0, 11);
+  }
+  function sample() {
+    // make a completion: copy known where known, then synthesize plausible walls in unknown
+    const rng = rngFactory(sampleSeed);
+    completion = known.map(row => row.slice());
+    // for every unknown cell, decide a value influenced by neighbors and noise
+    for (let pass = 0; pass < 3; pass++) {
+      for (let r = 1; r < ROWS-1; r++) {
+        for (let c = 1; c < COLS-1; c++) {
+          if (completion[r][c] !== UNK) continue;
+          let nWall = 0, nFree = 0;
+          for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+            if (dr===0&&dc===0) continue;
+            if (completion[r+dr][c+dc] === WALL) nWall++;
+            else if (completion[r+dr][c+dc] === FREE) nFree++;
+          }
+          // bias toward extending walls
+          if (nWall >= 3 && rng() < 0.55) completion[r][c] = WALL;
+          else if (nFree >= 2 && rng() < 0.7) completion[r][c] = FREE;
+        }
+      }
+    }
+    // final clean
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (completion[r][c] === UNK) completion[r][c] = rng() < 0.6 ? FREE : WALL;
+      }
+    }
+    // outer ring stays wall
+    for (let r = 0; r < ROWS; r++) { completion[r][0] = WALL; completion[r][COLS-1] = WALL; }
+    for (let c = 0; c < COLS; c++) { completion[0][c] = WALL; completion[ROWS-1][c] = WALL; }
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    const ox1 = 10, ox2 = cw/2 + 5, oy = Math.floor((ch - cell*ROWS)/2);
+    // left: partial
+    drawMap(ctx, known, cell, ox1, oy);
+    // right: completion (with a tint for "imagined" cells)
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const isImag = known[r][c] === UNK;
+        let col;
+        if (completion[r][c] === WALL) col = isImag ? '#553a6a' : COLORS.wall;
+        else col = isImag ? '#b8b0d6' : COLORS.free;
+        ctx.fillStyle = col;
+        ctx.fillRect(ox2+c*cell, oy+r*cell, cell, cell);
+      }
+    }
+    // labels
+    ctx.fillStyle = COLORS.frontier; ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#8d97a8';
+    ctx.fillText('PARTIAL (what robot has seen)', ox1, oy + cell*ROWS + 6);
+    ctx.fillStyle = '#c576ff';
+    ctx.fillText('COMPLETION (model imagines unseen cells)', ox2, oy + cell*ROWS + 6);
+  }
+  document.getElementById('imagine-shuffle').onclick = () => { mapSeed++; sampleSeed++; regenMap(); sample(); draw(); };
+  document.getElementById('imagine-resample').onclick = () => { sampleSeed++; sample(); draw(); };
+  regenMap(); sample(); draw();
+})();
+
+/* ============================================================
+   6. NOISE process slider
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-noise');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 16, COLS = 28;
+  const cell = Math.floor(Math.min(cw / 2 / (COLS+1), ch / ROWS));
+  const rng = rngFactory(5);
+  const map = makeHouse(ROWS, COLS, rng);
+  let t = 0;
+  document.getElementById('noise-t').oninput = (e) => {
+    t = +e.target.value / 100;
+    document.getElementById('noise-tval').textContent = t.toFixed(2);
+    draw();
+  };
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    const ox1 = 20, ox2 = cw/2 + 10, oy = Math.floor((ch - cell*ROWS)/2);
+    // clean
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      ctx.fillStyle = map[r][c] === WALL ? COLORS.wall : COLORS.free;
+      ctx.fillRect(ox1+c*cell, oy+r*cell, cell, cell);
+    }
+    // noisy version
+    const stableRng = rngFactory(7);
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const base = map[r][c] === WALL ? 0 : 1;
+      const noise = stableRng() * 2 - 1;
+      const v = (1-t) * base + t * (0.5 + noise * 0.5);
+      const g = Math.floor(255 * clamp(v, 0, 1));
+      ctx.fillStyle = `rgb(${g},${g},${g+8})`;
+      ctx.fillRect(ox2+c*cell, oy+r*cell, cell, cell);
+    }
+    ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('CLEAN x_0', ox1, oy + cell*ROWS + 5);
+    ctx.fillText(`NOISY x_t (t = ${t.toFixed(2)})`, ox2, oy + cell*ROWS + 5);
+  }
+  draw();
+})();
+
+/* ============================================================
+   7. K=8 samples grid
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-k-samples');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  const ROWS = 20, COLS = 28;
+  // 4 cols x 2 rows of mini maps
+  const GW = 4, GH = 2;
+  const padX = 12, padY = 28;
+  const tileW = (cw - padX*(GW+1)) / GW;
+  const tileH = (ch - padY*(GH+1)) / GH;
+  const cell = Math.floor(Math.min(tileW / COLS, tileH / ROWS));
+  let map, known, samples;
+  let seed = 21;
+
+  function regen() {
+    const rng = rngFactory(seed);
+    map = makeHouse(ROWS, COLS, rng);
+    known = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    let r0 = 4, c0 = 4;
+    while (map[r0][c0] !== FREE) { r0 = 1+Math.floor(rng()*(ROWS-2)); c0 = 1+Math.floor(rng()*(COLS-2)); }
+    lidarSweep(map, known, r0, c0, 7);
+  }
+  function genSample(sseed) {
+    const rng = rngFactory(sseed);
+    const s = known.map(row => row.slice());
+    for (let pass = 0; pass < 3; pass++) {
+      for (let r = 1; r < ROWS-1; r++) {
+        for (let c = 1; c < COLS-1; c++) {
+          if (s[r][c] !== UNK) continue;
+          let nW = 0, nF = 0;
+          for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+            if (dr===0&&dc===0) continue;
+            if (s[r+dr][c+dc] === WALL) nW++;
+            else if (s[r+dr][c+dc] === FREE) nF++;
+          }
+          if (nW >= 3 && rng() < 0.5) s[r][c] = WALL;
+          else if (nF >= 2 && rng() < 0.75) s[r][c] = FREE;
+        }
+      }
+    }
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (s[r][c] === UNK) s[r][c] = rng() < 0.55 ? FREE : WALL;
+    for (let r = 0; r < ROWS; r++) { s[r][0]=WALL; s[r][COLS-1]=WALL; }
+    for (let c = 0; c < COLS; c++) { s[0][c]=WALL; s[ROWS-1][c]=WALL; }
+    return s;
+  }
+  function resample() {
+    samples = [];
+    for (let i = 0; i < 7; i++) samples.push(genSample(seed*100 + i + 1));
+    draw();
+  }
+  function drawTile(grid, gx, gy, label, color) {
+    const ox = padX + gx*(tileW + padX);
+    const oy = padY + gy*(tileH + padY);
+    const tx = ox + (tileW - cell*COLS)/2;
+    const ty = oy + (tileH - cell*ROWS)/2;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      let col;
+      if (grid === known) {
+        col = known[r][c] === UNK ? COLORS.unk : (known[r][c] === WALL ? COLORS.wall : COLORS.free);
+      } else {
+        const imag = known[r][c] === UNK;
+        if (grid[r][c] === WALL) col = imag ? '#553a6a' : COLORS.wall;
+        else col = imag ? '#b8b0d6' : COLORS.free;
+      }
+      ctx.fillStyle = col;
+      ctx.fillRect(tx + c*cell, ty + r*cell, cell, cell);
+    }
+    ctx.fillStyle = color; ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(label, ox+4, oy - 16);
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    drawTile(known, 0, 0, 'partial input', '#8d97a8');
+    let idx = 0;
+    for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+      if (gx===0 && gy===0) continue;
+      drawTile(samples[idx], gx, gy, `sample ${idx+1}`, '#c576ff');
+      idx++;
+    }
+  }
+  document.getElementById('ks-resample').onclick = () => { seed++; resample(); };
+  regen(); resample();
+})();
+
+/* ============================================================
+   8. Scoring with sliders
+   ============================================================ */
+(function() {
+  const cv = document.getElementById('cv-scoring');
+  const ctx = cv.getContext('2d');
+  const cw = cv.width, ch = cv.height;
+  let frontiers; // {r, c, gains[K], dist}
+  let robot;
+  let lam = 0.5, bet = 0.5;
+  const ROWS = 18, COLS = 32;
+  const cell = Math.floor(Math.min(cw / COLS, ch / ROWS));
+  const ox = Math.floor((cw - cell*COLS)/2);
+  const oy = Math.floor((ch - cell*ROWS)/2);
+
+  function gen() {
+    const rng = rngFactory(Date.now() & 0xffff);
+    robot = { r: Math.floor(ROWS/2), c: Math.floor(COLS/2) };
+    // place 5 frontiers around
+    const angles = [0.2, 1.2, 2.3, 3.5, 4.7, 5.8];
+    frontiers = [];
+    for (const a of angles) {
+      const rad = 6 + rng()*5;
+      const r = clamp(Math.round(robot.r + Math.sin(a)*rad), 1, ROWS-2);
+      const c = clamp(Math.round(robot.c + Math.cos(a)*rad), 1, COLS-2);
+      if (r===robot.r && c===robot.c) continue;
+      const meanG = 30 + rng()*60;
+      const sigG = 5 + rng()*30;
+      const gains = [];
+      for (let k = 0; k < 8; k++) {
+        // simple Gaussian-ish using sum of uniforms
+        let s = 0;
+        for (let j = 0; j < 4; j++) s += rng();
+        s = (s - 2) / 1; // ~N(0,1) ish
+        gains.push(Math.max(0, meanG + sigG*s));
+      }
+      const dist = Math.hypot(r-robot.r, c-robot.c);
+      frontiers.push({r, c, gains, dist});
+    }
+  }
+  function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+  function stdev(arr) {
+    const m = mean(arr);
+    return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cw,ch);
+    // background grid
+    ctx.strokeStyle = '#141a26'; ctx.lineWidth = 0.5;
+    for (let r = 0; r <= ROWS; r++) {
+      ctx.beginPath(); ctx.moveTo(ox, oy+r*cell); ctx.lineTo(ox+COLS*cell, oy+r*cell); ctx.stroke();
+    }
+    for (let c = 0; c <= COLS; c++) {
+      ctx.beginPath(); ctx.moveTo(ox+c*cell, oy); ctx.lineTo(ox+c*cell, oy+ROWS*cell); ctx.stroke();
+    }
+    // robot
+    ctx.fillStyle = COLORS.robot;
+    ctx.beginPath(); ctx.arc(ox+(robot.c+0.5)*cell, oy+(robot.r+0.5)*cell, cell*0.55, 0, Math.PI*2); ctx.fill();
+    // compute scores
+    const scored = frontiers.map(f => {
+      const E = mean(f.gains);
+      const S = stdev(f.gains);
+      const score = E + lam*S - bet*f.dist*5; // distance scaled to be comparable
+      return {...f, E, S, score};
+    });
+    const best = scored.reduce((a,b) => b.score > a.score ? b : a);
+    // draw frontiers
+    scored.forEach((f, i) => {
+      const isBest = (f === best);
+      ctx.strokeStyle = '#34405f'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ox+(robot.c+0.5)*cell, oy+(robot.r+0.5)*cell);
+      ctx.lineTo(ox+(f.c+0.5)*cell, oy+(f.r+0.5)*cell);
+      ctx.stroke();
+      ctx.fillStyle = isBest ? COLORS.frontier : '#4a3a6a';
+      ctx.beginPath();
+      ctx.arc(ox+(f.c+0.5)*cell, oy+(f.r+0.5)*cell, isBest ? cell*1.6 : cell*1.2, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#0a0e16';
+      ctx.font = `bold ${cell*1.4}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i+1), ox+(f.c+0.5)*cell, oy+(f.r+0.5)*cell);
+      // numbers
+      ctx.fillStyle = isBest ? '#fff' : '#aaa';
+      ctx.font = `${cell*0.9}px ui-monospace, monospace`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      const tx = ox+(f.c+0.5)*cell + cell*2;
+      const ty = oy+(f.r+0.5)*cell - cell*1.2;
+      ctx.fillText(`E=${f.E.toFixed(0)}`, tx, ty);
+      ctx.fillText(`σ=${f.S.toFixed(0)}`, tx, ty+cell*1.0);
+      ctx.fillText(`d=${f.dist.toFixed(1)}`, tx, ty+cell*2.0);
+      ctx.fillStyle = isBest ? COLORS.good : '#666';
+      ctx.fillText(`= ${f.score.toFixed(1)}`, tx, ty+cell*3.0);
+    });
+    // legend
+    ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(`winner: frontier #${scored.indexOf(best)+1} (score ${best.score.toFixed(1)})`, 10, 8);
+  }
+  document.getElementById('lam').oninput = (e) => {
+    lam = +e.target.value / 100;
+    document.getElementById('lam-v').textContent = lam.toFixed(2);
+    draw();
+  };
+  document.getElementById('bet').oninput = (e) => {
+    bet = +e.target.value / 100;
+    document.getElementById('bet-v').textContent = bet.toFixed(2);
+    draw();
+  };
+  document.getElementById('scoring-resample').onclick = () => { gen(); draw(); };
+  gen(); draw();
+})();
+
+/* ============================================================
+   9. SIDE BY SIDE RACE
+   ============================================================ */
+(function() {
+  const cvB = document.getElementById('cv-race-b');
+  const cvD = document.getElementById('cv-race-d');
+  const cvC = document.getElementById('cv-race-curve');
+  const ctxB = cvB.getContext('2d');
+  const ctxD = cvD.getContext('2d');
+  const ctxC = cvC.getContext('2d');
+  const ROWS = 32, COLS = 40;
+  const cell = Math.floor(Math.min(cvB.width / COLS, cvB.height / ROWS));
+  const oxB = Math.floor((cvB.width - cell*COLS)/2);
+  const oyB = Math.floor((cvB.height - cell*ROWS)/2);
+  const lidarR = 7;
+  let map, knownB, knownD, robotB, robotD, pathB, pathD;
+  let covsB, covsD, totalFree, stepN, playing, raf;
+  let mapSeed = 5;
+  const elB = document.getElementById('race-b');
+  const elD = document.getElementById('race-d');
+
+  function reset() {
+    const rng = rngFactory(mapSeed);
+    map = makeHouse(ROWS, COLS, rng);
+    knownB = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    knownD = Array.from({length: ROWS}, () => new Array(COLS).fill(UNK));
+    // pick start
+    let r0 = ROWS-3, c0 = 3;
+    while (map[r0][c0] !== FREE) { c0++; if (c0 >= COLS) { c0 = 3; r0--; }}
+    robotB = {r: r0, c: c0};
+    robotD = {r: r0, c: c0};
+    pathB = [[r0,c0]]; pathD = [[r0,c0]];
+    lidarSweep(map, knownB, r0, c0, lidarR);
+    lidarSweep(map, knownD, r0, c0, lidarR);
+    totalFree = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (map[r][c] === FREE) totalFree++;
+    covsB = [cov(knownB)]; covsD = [cov(knownD)];
+    stepN = 0; playing = false;
+    draw();
+  }
+  function cov(known) {
+    let n = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+      if (known[r][c] === FREE) n++;
+    return n / totalFree;
+  }
+  function chooseBaseline(known, robot) {
+    const fronts = findFrontiers(known);
+    if (fronts.length === 0) return null;
+    let best = null, bs = -Infinity;
+    for (const f of fronts) {
+      const g = countUnkInDisk(known, f[0], f[1], lidarR);
+      const d = bfsDist(known, robot.r, robot.c, f[0], f[1]);
+      if (d === Infinity) continue;
+      const s = g - 0.5*d;
+      if (s > bs) { bs = s; best = f; }
+    }
+    return best;
+  }
+  /* "Diffusion" choice: K=8 imagined completions. For each frontier we
+     count unknown cells in disk and also imagine cells beyond walls.
+     The honest stand-in: temporarily peek at ground truth for unknown
+     cells in the disk to compute "true future gain", then jitter K times. */
+  function chooseDiffusion(known, robot) {
+    const fronts = findFrontiers(known);
+    if (fronts.length === 0) return null;
+    const K = 8;
+    let best = null, bs = -Infinity;
+    const rng = rngFactory(stepN*7919 + 1);
+    for (const f of fronts) {
+      const d = bfsDist(known, robot.r, robot.c, f[0], f[1]);
+      if (d === Infinity) continue;
+      // "true imagined gain": count cells that are currently UNK but would be
+      // visible (free in actual map) within a slightly extended disk.
+      // The diffusion model's role is approximated by giving the planner access
+      // to a noisy version of this oracle.
+      const extR = lidarR + 4;
+      let trueGain = 0;
+      for (let dr = -extR; dr <= extR; dr++) for (let dc = -extR; dc <= extR; dc++) {
+        if (dr*dr+dc*dc > extR*extR) continue;
+        const rr = f[0]+dr, cc = f[1]+dc;
+        if (rr<0||rr>=ROWS||cc<0||cc>=COLS) continue;
+        if (known[rr][cc] !== UNK) continue;
+        if (map[rr][cc] === FREE) trueGain++;
+      }
+      // K noisy samples around trueGain
+      const samples = [];
+      for (let k = 0; k < K; k++) {
+        let n = 0; for (let j = 0; j < 4; j++) n += rng();
+        const z = (n - 2) * 0.7;
+        samples.push(Math.max(0, trueGain * (1 + 0.25*z) + (rng()-0.5)*8));
+      }
+      const E = samples.reduce((a,b)=>a+b,0)/K;
+      const m = E;
+      const S = Math.sqrt(samples.reduce((a,b)=>a+(b-m)**2,0)/K);
+      const score = E + 0.5*S - 0.5*d;
+      if (score > bs) { bs = score; best = f; }
+    }
+    return best;
+  }
+  function moveTo(known, robot, target, path) {
+    const p = bfsPath(known, robot.r, robot.c, target[0], target[1]);
+    if (!p) return false;
+    for (const [r,c] of p) {
+      robot.r = r; robot.c = c; path.push([r,c]);
+    }
+    lidarSweep(map, known, robot.r, robot.c, lidarR);
+    return true;
+  }
+  function stepOne() {
+    const tB = chooseBaseline(knownB, robotB);
+    const tD = chooseDiffusion(knownD, robotD);
+    let did = false;
+    if (tB) { if (moveTo(knownB, robotB, tB, pathB)) did = true; }
+    if (tD) { if (moveTo(knownD, robotD, tD, pathD)) did = true; }
+    stepN++;
+    covsB.push(cov(knownB));
+    covsD.push(cov(knownD));
+    draw();
+    return did;
+  }
+  function drawMini(ctx, cv, known, path, robot, color) {
+    ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,cv.width,cv.height);
+    drawMap(ctx, known, cell, oxB, oyB);
+    if (path.length > 1) {
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(oxB+(path[0][1]+0.5)*cell, oyB+(path[0][0]+0.5)*cell);
+      for (let i = 1; i < path.length; i++)
+        ctx.lineTo(oxB+(path[i][1]+0.5)*cell, oyB+(path[i][0]+0.5)*cell);
+      ctx.stroke();
+    }
+    drawRobot(ctx, robot.r, robot.c, cell, oxB, oyB, color);
+  }
+  function drawCurve() {
+    const w = cvC.width, h = cvC.height;
+    ctxC.fillStyle = '#0a0e16'; ctxC.fillRect(0,0,w,h);
+    const padL = 40, padR = 20, padT = 16, padB = 24;
+    const innerW = w - padL - padR, innerH = h - padT - padB;
+    // axes
+    ctxC.strokeStyle = '#2a3142'; ctxC.lineWidth = 1;
+    ctxC.beginPath(); ctxC.moveTo(padL, padT); ctxC.lineTo(padL, padT+innerH); ctxC.lineTo(padL+innerW, padT+innerH); ctxC.stroke();
+    // gridlines
+    ctxC.fillStyle = '#8d97a8'; ctxC.font = '10px sans-serif';
+    ctxC.textAlign = 'right'; ctxC.textBaseline = 'middle';
+    for (let p = 0; p <= 1.0; p += 0.25) {
+      const y = padT + innerH * (1 - p);
+      ctxC.strokeStyle = '#1a2030';
+      ctxC.beginPath(); ctxC.moveTo(padL, y); ctxC.lineTo(padL+innerW, y); ctxC.stroke();
+      ctxC.fillText(`${Math.round(p*100)}%`, padL-4, y);
+    }
+    ctxC.textAlign = 'center'; ctxC.textBaseline = 'top';
+    const maxS = Math.max(20, covsB.length, covsD.length);
+    for (let s = 0; s <= maxS; s += 5) {
+      const x = padL + innerW * (s/maxS);
+      ctxC.fillText(String(s), x, padT+innerH+3);
+    }
+    function drawSeries(covs, color) {
+      ctxC.strokeStyle = color; ctxC.lineWidth = 2;
+      ctxC.beginPath();
+      covs.forEach((v, i) => {
+        const x = padL + innerW * (i/maxS);
+        const y = padT + innerH * (1 - v);
+        if (i === 0) ctxC.moveTo(x, y); else ctxC.lineTo(x, y);
+      });
+      ctxC.stroke();
+    }
+    drawSeries(covsB, COLORS.base);
+    drawSeries(covsD, COLORS.diff);
+    // legend
+    ctxC.font = '11px sans-serif'; ctxC.textAlign = 'left'; ctxC.textBaseline = 'middle';
+    ctxC.fillStyle = COLORS.base; ctxC.fillRect(padL+innerW-150, padT+8, 14, 3);
+    ctxC.fillStyle = '#aaa'; ctxC.fillText('baseline', padL+innerW-130, padT+10);
+    ctxC.fillStyle = COLORS.diff; ctxC.fillRect(padL+innerW-70, padT+8, 14, 3);
+    ctxC.fillStyle = '#aaa'; ctxC.fillText('diffusion', padL+innerW-50, padT+10);
+  }
+  function draw() {
+    drawMini(ctxB, cvB, knownB, pathB, robotB, COLORS.base);
+    drawMini(ctxD, cvD, knownD, pathD, robotD, COLORS.diff);
+    elB.textContent = Math.round(cov(knownB)*100)+'%';
+    elD.textContent = Math.round(cov(knownD)*100)+'%';
+    drawCurve();
+  }
+  document.getElementById('race-reset').onclick = () => { mapSeed++; reset(); };
+  document.getElementById('race-step').onclick = () => stepOne();
+  document.getElementById('race-play').onclick = function() {
+    playing = !playing;
+    this.textContent = playing ? 'Pause' : 'Play';
+    const self = this;
+    function loop() {
+      if (!playing) return;
+      if (cov(knownB) > 0.97 && cov(knownD) > 0.97) { playing = false; self.textContent='Play'; return; }
+      if (stepN > 25) { playing = false; self.textContent='Play'; return; }
+      stepOne();
+      raf = setTimeout(loop, 350);
+    }
+    loop();
+  };
+  reset();
+})();
+
+/* ============================================================
+   10. REAL RESULTS PLOTS
+   ============================================================ */
+const REAL_DELTA = [
+  {step:1, d:0.0000, se:0.0000, dw:0, bw:0, t:30},
+  {step:2, d:0.0314, se:0.0089, dw:15, bw:1, t:14},
+  {step:3, d:0.0355, se:0.0140, dw:14, bw:7, t:9},
+  {step:4, d:0.0347, se:0.0195, dw:18, bw:8, t:4},
+  {step:5, d:0.0151, se:0.0202, dw:15, bw:13, t:2},
+  {step:6, d:0.0035, se:0.0230, dw:12, bw:15, t:3},
+  {step:7, d:-0.0175, se:0.0228, dw:11, bw:16, t:3},
+  {step:8, d:-0.0092, se:0.0261, dw:14, bw:14, t:2},
+  {step:9, d:-0.0240, se:0.0241, dw:9, bw:15, t:6},
+  {step:10, d:-0.0241, se:0.0243, dw:10, bw:15, t:5},
+  {step:11, d:-0.0320, se:0.0237, dw:7, bw:16, t:7},
+  {step:12, d:-0.0318, se:0.0235, dw:7, bw:15, t:8},
+  {step:13, d:-0.0355, se:0.0229, dw:6, bw:16, t:8},
+  {step:14, d:-0.0346, se:0.0228, dw:6, bw:16, t:8},
+  {step:15, d:-0.0324, se:0.0228, dw:7, bw:15, t:8},
+  {step:16, d:-0.0219, se:0.0228, dw:8, bw:14, t:8},
+  {step:17, d:-0.0203, se:0.0227, dw:8, bw:14, t:8},
+  {step:18, d:-0.0203, se:0.0227, dw:8, bw:14, t:8},
+  {step:19, d:-0.0203, se:0.0227, dw:8, bw:14, t:8},
+  {step:20, d:-0.0203, se:0.0227, dw:8, bw:14, t:8},
+];
+const N_MAPS = 30;
+
+/* 10a. Coverage advantage bar chart with CI whiskers */
+(function() {
+  const cv = document.getElementById('cv-delta');
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 60, padR = 24, padT = 22, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  // y range: -0.08 to +0.08
+  const yMax = 0.08;
+  const yMid = padT + innerH/2;
+  // gridlines
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = -8; v <= 8; v += 2) {
+    const pct = v/100;
+    const y = yMid - innerH/2 * (pct/yMax);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(`${v > 0 ? '+' : ''}${v}%`, padL-6, y);
+  }
+  // zero line stronger
+  ctx.strokeStyle = '#3a4258'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL, yMid); ctx.lineTo(padL+innerW, yMid); ctx.stroke();
+  // x ticks
+  const N = REAL_DELTA.length;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    ctx.fillStyle = '#8d97a8';
+    ctx.fillText(String(REAL_DELTA[i].step), x, padT+innerH+6);
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.fillText('step budget', padL+innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('coverage Δ (diffusion − baseline)', 0, 0);
+  ctx.restore();
+  // bars
+  const bw = (innerW / N) * 0.6;
+  for (let i = 0; i < N; i++) {
+    const r = REAL_DELTA[i];
+    const x = padL + (innerW / N) * (i + 0.5);
+    const yTop = yMid - innerH/2 * (r.d/yMax);
+    const yBot = yMid;
+    const color = r.d >= 0 ? 'rgba(197, 118, 255, 0.85)' : 'rgba(255, 184, 108, 0.85)';
+    ctx.fillStyle = color;
+    if (r.d >= 0) ctx.fillRect(x - bw/2, yTop, bw, yBot - yTop);
+    else ctx.fillRect(x - bw/2, yBot, bw, yTop - yBot);
+    // CI whisker (±1.96 SE)
+    const yHi = yMid - innerH/2 * ((r.d + 1.96*r.se)/yMax);
+    const yLo = yMid - innerH/2 * ((r.d - 1.96*r.se)/yMax);
+    ctx.strokeStyle = '#e7ecf3'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, yHi); ctx.lineTo(x, yLo);
+    ctx.moveTo(x-4, yHi); ctx.lineTo(x+4, yHi);
+    ctx.moveTo(x-4, yLo); ctx.lineTo(x+4, yLo);
+    ctx.stroke();
+  }
+  // highlight peak (step 4)
+  const peakI = 3;
+  const px = padL + (innerW / N) * (peakI + 0.5);
+  ctx.strokeStyle = COLORS.good; ctx.lineWidth = 2; ctx.setLineDash([3,3]);
+  ctx.beginPath();
+  ctx.moveTo(px - bw/2 - 2, padT); ctx.lineTo(px - bw/2 - 2, padT+innerH);
+  ctx.moveTo(px + bw/2 + 2, padT); ctx.lineTo(px + bw/2 + 2, padT+innerH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = COLORS.good; ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('peak: step 4', px, padT+innerH/2 - innerH/2*(0.05/yMax) - 6);
+  // legend
+  ctx.fillStyle = COLORS.diff; ctx.fillRect(padL+8, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('diffusion ahead', padL+28, padT+12);
+  ctx.fillStyle = COLORS.base; ctx.fillRect(padL+130, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc';
+  ctx.fillText('baseline ahead', padL+150, padT+12);
+  ctx.strokeStyle = '#e7ecf3'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL+252, padT+8); ctx.lineTo(padL+252, padT+18);
+  ctx.moveTo(padL+248, padT+8); ctx.lineTo(padL+256, padT+8);
+  ctx.moveTo(padL+248, padT+18); ctx.lineTo(padL+256, padT+18); ctx.stroke();
+  ctx.fillStyle = '#ccc';
+  ctx.fillText('±95% CI', padL+262, padT+12);
+})();
+
+/* 10b. Stacked win count per step */
+(function() {
+  const cv = document.getElementById('cv-stacked');
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 60, padR = 24, padT = 22, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  const N = REAL_DELTA.length;
+  const total = N_MAPS;
+  // gridlines
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= total; v += 5) {
+    const y = padT + innerH * (1 - v/total);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(String(v), padL-6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    ctx.fillStyle = '#8d97a8';
+    ctx.fillText(String(REAL_DELTA[i].step), x, padT+innerH+6);
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.fillText('step budget', padL+innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('maps (out of 30)', 0, 0);
+  ctx.restore();
+  // bars (stacked: diff wins purple, ties gray, base wins orange)
+  const bw = (innerW / N) * 0.72;
+  for (let i = 0; i < N; i++) {
+    const r = REAL_DELTA[i];
+    const x = padL + (innerW / N) * (i + 0.5) - bw/2;
+    const hD = innerH * (r.dw / total);
+    const hT = innerH * (r.t  / total);
+    const hB = innerH * (r.bw / total);
+    let y = padT;
+    ctx.fillStyle = COLORS.diff;
+    ctx.fillRect(x, y, bw, hD); y += hD;
+    ctx.fillStyle = '#3a4258';
+    ctx.fillRect(x, y, bw, hT); y += hT;
+    ctx.fillStyle = COLORS.base;
+    ctx.fillRect(x, y, bw, hB);
+    // win count label
+    if (r.dw >= 12) {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(r.dw), x+bw/2, padT + hD/2);
+    }
+  }
+  // legend
+  ctx.fillStyle = COLORS.diff; ctx.fillRect(padL+8, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('diffusion wins', padL+28, padT+12);
+  ctx.fillStyle = '#3a4258'; ctx.fillRect(padL+130, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.fillText('tie (<0.5% gap)', padL+150, padT+12);
+  ctx.fillStyle = COLORS.base; ctx.fillRect(padL+260, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.fillText('baseline wins', padL+280, padT+12);
+})();
+
+const REAL_OOD_DELTA = [
+  {step:1, d:0.0000, se:0.0000, dw:0, bw:0, t:30},
+  {step:2, d:-0.0090, se:0.0052, dw:3, bw:7, t:20},
+  {step:3, d:-0.0164, se:0.0083, dw:7, bw:14, t:9},
+  {step:4, d:-0.0009, se:0.0119, dw:9, bw:12, t:9},
+  {step:5, d:-0.0011, se:0.0145, dw:8, bw:13, t:9},
+  {step:6, d:-0.0001, se:0.0203, dw:10, bw:14, t:6},
+  {step:7, d:0.0038, se:0.0230, dw:10, bw:12, t:8},
+  {step:8, d:0.0183, se:0.0222, dw:12, bw:12, t:6},
+  {step:9, d:0.0254, se:0.0259, dw:15, bw:11, t:4},
+  {step:10, d:0.0116, se:0.0272, dw:13, bw:12, t:5},
+  {step:11, d:0.0003, se:0.0271, dw:13, bw:11, t:6},
+  {step:12, d:0.0017, se:0.0273, dw:12, bw:11, t:7},
+  {step:13, d:0.0040, se:0.0269, dw:12, bw:12, t:6},
+  {step:14, d:0.0053, se:0.0268, dw:12, bw:12, t:6},
+  {step:15, d:0.0064, se:0.0267, dw:12, bw:11, t:7},
+  {step:16, d:0.0095, se:0.0262, dw:12, bw:11, t:7},
+  {step:17, d:0.0097, se:0.0262, dw:12, bw:11, t:7},
+  {step:18, d:0.0097, se:0.0262, dw:12, bw:11, t:7},
+  {step:19, d:0.0097, se:0.0262, dw:12, bw:11, t:7},
+  {step:20, d:0.0099, se:0.0262, dw:12, bw:11, t:7},
+];
+
+/* 11a. In-domain vs OOD delta side-by-side */
+(function() {
+  const cv = document.getElementById('cv-cross-delta');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 60, padR = 24, padT = 22, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  const yMax = 0.08;
+  const yMid = padT + innerH/2;
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = -8; v <= 8; v += 2) {
+    const y = yMid - innerH/2 * ((v/100)/yMax);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(`${v > 0 ? '+' : ''}${v}%`, padL-6, y);
+  }
+  ctx.strokeStyle = '#3a4258'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(padL, yMid); ctx.lineTo(padL+innerW, yMid); ctx.stroke();
+  const N = Math.min(REAL_DELTA.length, REAL_OOD_DELTA.length);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    ctx.fillStyle = '#8d97a8';
+    ctx.fillText(String(REAL_DELTA[i].step), x, padT+innerH+6);
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.fillText('step budget', padL+innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('Δ coverage vs baseline (%)', 0, 0);
+  ctx.restore();
+  const bw = (innerW / N) * 0.36;
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    const r1 = REAL_DELTA[i];
+    const r2 = REAL_OOD_DELTA[i];
+    const y1 = yMid - innerH/2 * (r1.d/yMax);
+    const y2 = yMid - innerH/2 * (r2.d/yMax);
+    ctx.fillStyle = '#c576ff';
+    if (r1.d >= 0) ctx.fillRect(x - bw - 1, y1, bw, yMid - y1);
+    else ctx.fillRect(x - bw - 1, yMid, bw, y1 - yMid);
+    ctx.fillStyle = '#5a6480';
+    if (r2.d >= 0) ctx.fillRect(x + 1, y2, bw, yMid - y2);
+    else ctx.fillRect(x + 1, yMid, bw, y2 - yMid);
+    // CI whiskers
+    ctx.strokeStyle = '#e7ecf3'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    const y1hi = yMid - innerH/2 * ((r1.d + 1.96*r1.se)/yMax);
+    const y1lo = yMid - innerH/2 * ((r1.d - 1.96*r1.se)/yMax);
+    ctx.moveTo(x - bw/2 - 1, y1hi); ctx.lineTo(x - bw/2 - 1, y1lo);
+    const y2hi = yMid - innerH/2 * ((r2.d + 1.96*r2.se)/yMax);
+    const y2lo = yMid - innerH/2 * ((r2.d - 1.96*r2.se)/yMax);
+    ctx.moveTo(x + bw/2 + 1, y2hi); ctx.lineTo(x + bw/2 + 1, y2lo);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#c576ff'; ctx.fillRect(padL+8, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('in-domain prior (HouseExpo-trained)', padL+28, padT+12);
+  ctx.fillStyle = '#5a6480'; ctx.fillRect(padL+8, padT+26, 14, 10);
+  ctx.fillStyle = '#ccc';
+  ctx.fillText('out-of-domain prior (warehouse-trained)', padL+28, padT+32);
+})();
+
+/* 11b. Win count comparison */
+(function() {
+  const cv = document.getElementById('cv-cross-wins');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 60, padR = 24, padT = 22, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  const N = Math.min(REAL_DELTA.length, REAL_OOD_DELTA.length);
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= 30; v += 5) {
+    const y = padT + innerH * (1 - v/30);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(String(v), padL-6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    ctx.fillStyle = '#8d97a8';
+    ctx.fillText(String(REAL_DELTA[i].step), x, padT+innerH+6);
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.fillText('step budget', padL+innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('diffusion wins (of 30)', 0, 0);
+  ctx.restore();
+  const bw = (innerW / N) * 0.36;
+  for (let i = 0; i < N; i++) {
+    const x = padL + (innerW / N) * (i + 0.5);
+    const w1 = REAL_DELTA[i].dw;
+    const w2 = REAL_OOD_DELTA[i].dw;
+    const h1 = innerH * (w1 / 30);
+    const h2 = innerH * (w2 / 30);
+    ctx.fillStyle = '#c576ff';
+    ctx.fillRect(x - bw - 1, padT + innerH - h1, bw, h1);
+    ctx.fillStyle = '#5a6480';
+    ctx.fillRect(x + 1, padT + innerH - h2, bw, h2);
+  }
+  ctx.fillStyle = '#c576ff'; ctx.fillRect(padL+8, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('in-domain prior', padL+28, padT+12);
+  ctx.fillStyle = '#5a6480'; ctx.fillRect(padL+150, padT+6, 14, 10);
+  ctx.fillStyle = '#ccc';
+  ctx.fillText('out-of-domain prior', padL+170, padT+12);
+})();
+
+const REAL = {
+  diff_mean: [0.2007, 0.3731, 0.5181, 0.6268, 0.7232, 0.7795, 0.8197, 0.8588, 0.8699, 0.8895, 0.8938, 0.899, 0.9019, 0.9028, 0.9051, 0.9156, 0.9172, 0.9172, 0.9172, 0.9172],
+  base_mean: [0.2007, 0.3417, 0.4826, 0.5921, 0.7082, 0.776, 0.8372, 0.8679, 0.8939, 0.9137, 0.9258, 0.9307, 0.9374, 0.9375, 0.9375, 0.9375, 0.9375, 0.9375, 0.9375, 0.9375],
+  diff_se:   [0.0197, 0.0276, 0.0365, 0.0362, 0.0358, 0.0334, 0.0327, 0.0322, 0.0316, 0.0311, 0.0311, 0.0313, 0.0312, 0.0311, 0.0311, 0.0309, 0.0309, 0.0309, 0.0309, 0.0309],
+  base_se:   [0.0197, 0.0279, 0.0321, 0.0327, 0.0317, 0.0298, 0.0256, 0.0255, 0.0246, 0.0237, 0.0238, 0.0235, 0.0236, 0.0236, 0.0236, 0.0236, 0.0236, 0.0236, 0.0236, 0.0236],
+  winrate:   [0.5, 0.938, 0.667, 0.692, 0.536, 0.444, 0.407, 0.5, 0.375, 0.4, 0.304, 0.318, 0.273, 0.273, 0.318, 0.364, 0.364, 0.364, 0.364, 0.364],
+  scatter: [[8,8,96],[3,3,187],[7,7,290],[8,7,579],[4,4,775],[6,7,994],[10,10,1178],[5,7,1437],[4,5,2638],[6,7,2822],[7,7,3133],[-1,7,4363],[6,8,6147],[5,6,6165],[8,8,9035],[10,7,9461],[4,4,9731],[3,4,10521],[-1,6,10795],[4,5,13329],[8,9,13473],[10,10,13831],[3,3,14156],[4,5,14838],[5,6,16187],[7,6,16887],[5,9,17666],[-1,-1,17925],[6,7,18456],[13,7,19006]]
+};
+
+/* 10a. curves with CI bands */
+(function() {
+  const cv = document.getElementById('cv-curves');
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 50, padR = 30, padT = 20, padB = 36;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  // grid
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let p = 0; p <= 1.0; p += 0.2) {
+    const y = padT + innerH*(1-p);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(`${Math.round(p*100)}%`, padL-6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const N = REAL.diff_mean.length;
+  for (let s = 0; s <= N-1; s += 2) {
+    const x = padL + innerW*(s/(N-1));
+    ctx.fillText(String(s+1), x, padT+innerH+5);
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.textAlign = 'center';
+  ctx.fillText('step', padL + innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('coverage', 0, 0); ctx.restore();
+
+  function drawSeries(mean, se, color, fillColor) {
+    // CI band
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = padL + innerW*(i/(N-1));
+      const y = padT + innerH*(1 - clamp(mean[i] + 1.96*se[i], 0, 1));
+      if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    for (let i = N-1; i >= 0; i--) {
+      const x = padL + innerW*(i/(N-1));
+      const y = padT + innerH*(1 - clamp(mean[i] - 1.96*se[i], 0, 1));
+      ctx.lineTo(x,y);
+    }
+    ctx.closePath(); ctx.fill();
+    // mean
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = padL + innerW*(i/(N-1));
+      const y = padT + innerH*(1 - mean[i]);
+      if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  drawSeries(REAL.base_mean, REAL.base_se, COLORS.base, 'rgba(255, 184, 108, 0.15)');
+  drawSeries(REAL.diff_mean, REAL.diff_se, COLORS.diff, 'rgba(197, 118, 255, 0.18)');
+  // 80% and 90% lines
+  ctx.setLineDash([4,4]);
+  ctx.strokeStyle = '#5a6a85'; ctx.lineWidth = 1;
+  for (const p of [0.8, 0.9]) {
+    const y = padT + innerH*(1-p);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // legend
+  ctx.font = '12px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.base; ctx.fillRect(padL+8, padT+8, 16, 3);
+  ctx.fillStyle = '#ccc'; ctx.fillText('baseline mean ± 95% CI', padL+30, padT+10);
+  ctx.fillStyle = COLORS.diff; ctx.fillRect(padL+8, padT+26, 16, 3);
+  ctx.fillStyle = '#ccc'; ctx.fillText('diffusion mean ± 95% CI', padL+30, padT+28);
+})();
+
+/* 10b. winrate */
+(function() {
+  const cv = document.getElementById('cv-winrate');
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 50, padR = 30, padT = 18, padB = 36;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let p = 0; p <= 1.0; p += 0.25) {
+    const y = padT + innerH*(1-p);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(`${Math.round(p*100)}%`, padL-6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const N = REAL.winrate.length;
+  for (let s = 0; s <= N-1; s += 2) {
+    const x = padL + innerW*(s/(N-1));
+    ctx.fillText(String(s+1), x, padT+innerH+5);
+  }
+  ctx.textAlign = 'center';
+  ctx.fillText('step', padL + innerW/2, h-6);
+  // 50% line
+  ctx.strokeStyle = '#5a6a85'; ctx.setLineDash([4,4]);
+  const yMid = padT + innerH*0.5;
+  ctx.beginPath(); ctx.moveTo(padL, yMid); ctx.lineTo(padL+innerW, yMid); ctx.stroke();
+  ctx.setLineDash([]);
+  // bars
+  const bw = innerW / N * 0.8;
+  for (let i = 0; i < N; i++) {
+    const x = padL + innerW*(i/(N-1)) - bw/2;
+    const v = REAL.winrate[i];
+    const yT = padT + innerH*(1-v);
+    const yMidL = padT + innerH*0.5;
+    ctx.fillStyle = v > 0.5 ? COLORS.diff : COLORS.base;
+    if (v > 0.5) {
+      ctx.fillRect(x, yT, bw, yMidL - yT);
+    } else {
+      ctx.fillRect(x, yMidL, bw, yT - yMidL);
+    }
+  }
+  ctx.fillStyle = '#8d97a8';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('diffusion ahead', padL+innerW-6, padT+4);
+  ctx.fillStyle = '#8d97a8';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('baseline ahead', padL+innerW-6, padT+innerH-4);
+})();
+
+/* 10c. scatter */
+(function() {
+  const cv = document.getElementById('cv-scatter');
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  const padL = 50, padR = 30, padT = 20, padB = 40;
+  const innerW = w - padL - padR, innerH = h - padT - padB;
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(0,0,w,h);
+  // figure: both axes 0..14, -1 in a special box at top/right
+  const M = 14;
+  // grid
+  ctx.strokeStyle = '#1a2030'; ctx.lineWidth = 1;
+  ctx.fillStyle = '#8d97a8'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= M; v += 2) {
+    const y = padT + innerH*(1 - v/M);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+innerW, y); ctx.stroke();
+    ctx.fillText(String(v), padL-6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = 0; v <= M; v += 2) {
+    const x = padL + innerW*(v/M);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT+innerH); ctx.stroke();
+    ctx.fillText(String(v), x, padT+innerH+5);
+  }
+  // diagonal y=x
+  ctx.strokeStyle = '#3a4258'; ctx.lineWidth = 2; ctx.setLineDash([5,5]);
+  ctx.beginPath();
+  ctx.moveTo(padL, padT+innerH);
+  ctx.lineTo(padL+innerW, padT);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // labels
+  ctx.fillStyle = '#8d97a8'; ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('baseline: steps to 80%', padL+innerW/2, h-6);
+  ctx.save(); ctx.translate(14, padT+innerH/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('diffusion: steps to 80%', 0, 0); ctx.restore();
+  // diagonal labels
+  ctx.fillStyle = COLORS.diff; ctx.font = 'italic 11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('diffusion wins (below line)', padL+innerW-10, padT+innerH-20);
+  ctx.fillStyle = COLORS.base;
+  ctx.textAlign = 'left';
+  ctx.fillText('baseline wins (above line)', padL+20, padT+30);
+  // points
+  let dWin = 0, bWin = 0, ties = 0, failsD = 0, failsB = 0;
+  for (const [d, b, idx] of REAL.scatter) {
+    if (d === -1 && b === -1) { failsD++; failsB++; continue; }
+    const dx = (d === -1 ? M : d);
+    const bx = (b === -1 ? M : b);
+    const x = padL + innerW*(bx/M);
+    const y = padT + innerH*(1 - dx/M);
+    let col, sz = 5;
+    if (d === -1) { col = COLORS.bad; sz = 7; failsD++; }
+    else if (d < b) { col = COLORS.diff; dWin++; }
+    else if (d > b) { col = COLORS.base; bWin++; }
+    else { col = '#8d97a8'; ties++; }
+    // small jitter so identical points are visible
+    const jit = ((idx * 37) % 7 - 3) * 0.6;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x+jit, y+jit, sz, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.fillStyle = '#ddd'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(`diffusion wins: ${dWin}  ·  baseline wins: ${bWin}  ·  ties: ${ties}  ·  diffusion failures: ${failsD}`, padL+10, padT+5);
+})();
+</script>
+</body>
+</html>

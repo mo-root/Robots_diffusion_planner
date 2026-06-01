@@ -1,0 +1,5 @@
+Method                  Step-4 cov  Final cov  Steps to 80%  80% reach %
+Nearest                      42.6%      88.0%         12.1        80.0%
+Info-gain only               60.1%      94.2%          6.4        96.7%
+Info-gain + dist             59.2%      94.2%          6.5        96.7%
+Diffusion (ours)             62.7%      91.7%          6.3        90.0%
