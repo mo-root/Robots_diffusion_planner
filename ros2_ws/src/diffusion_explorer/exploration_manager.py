@@ -41,8 +41,11 @@ class ExplorationManager(Node):
         self.declare_parameter("waypoint_tolerance", 0.25)
         self.declare_parameter("coverage_threshold", 0.90)
         self.declare_parameter("occ_threshold", 50)      # >= this (0-100) = obstacle
-        self.declare_parameter("inflate_radius", 2)       # obstacle inflation, cells
+        self.declare_parameter("inflate_radius", 4)       # obstacle inflation, cells (>= robot radius)
         self.declare_parameter("odom_frame", "odom")
+        self.declare_parameter("stuck_timeout", 6.0)      # s without progress -> recover
+        self.declare_parameter("recovery_time", 1.6)      # s of reverse + rotate
+        self.declare_parameter("progress_dist", 0.15)     # m that counts as progress
 
         self.max_v = self.get_parameter("max_linear_speed").value
         self.max_w = self.get_parameter("max_angular_speed").value
@@ -52,6 +55,9 @@ class ExplorationManager(Node):
         self.occ_thresh = self.get_parameter("occ_threshold").value
         self.inflate = self.get_parameter("inflate_radius").value
         self.odom_frame = self.get_parameter("odom_frame").value
+        self.stuck_timeout = self.get_parameter("stuck_timeout").value
+        self.recovery_time = self.get_parameter("recovery_time").value
+        self.progress_dist = self.get_parameter("progress_dist").value
 
         self.goal_sub = self.create_subscription(
             PoseStamped, "/best_frontier", self.goal_callback, 10)
@@ -81,6 +87,11 @@ class ExplorationManager(Node):
         self.path = []                # list of (wx, wy) world waypoints
         self.path_idx = 0
         self.need_plan = False
+        # stuck detection / recovery
+        self.last_prog_pos = (0.0, 0.0)
+        self.last_prog_time = 0.0
+        self.recovery_until = 0.0
+        self.blacklist = []           # (wx, wy, expiry) goals abandoned as unreachable
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -90,10 +101,15 @@ class ExplorationManager(Node):
     def goal_callback(self, msg: PoseStamped):
         if self.exploration_done:
             return
-        self.current_goal = (msg.pose.position.x, msg.pose.position.y)
-        self.need_plan = True         # replan on every new diffusion-scored goal
-        self.get_logger().info(
-            f"New goal: ({self.current_goal[0]:.2f}, {self.current_goal[1]:.2f})")
+        gx, gy = msg.pose.position.x, msg.pose.position.y
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self.blacklist = [(bx, by, e) for (bx, by, e) in self.blacklist if e > now]
+        for (bx, by, _e) in self.blacklist:
+            if math.hypot(gx - bx, gy - by) < 0.6:
+                return                # ignore a frontier we just abandoned as unreachable
+        self.current_goal = (gx, gy)
+        self.need_plan = True         # replan on every new scored goal
+        self.get_logger().info(f"New goal: ({gx:.2f}, {gy:.2f})")
 
     def odom_callback(self, msg: Odometry):
         self.robot_x = msg.pose.pose.position.x
@@ -203,6 +219,29 @@ class ExplorationManager(Node):
             self._stop()
             self.done_pub.publish(Bool(data=True))
             return
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+        # recovery: reverse + rotate to escape a wall the robot has wedged against
+        if now < self.recovery_until:
+            cmd = Twist()
+            cmd.linear.x = -0.12
+            cmd.angular.z = 0.9
+            self.cmd_pub.publish(cmd)
+            return
+        # stuck detection: no real progress for stuck_timeout seconds
+        if math.hypot(self.robot_x - self.last_prog_pos[0],
+                      self.robot_y - self.last_prog_pos[1]) > self.progress_dist:
+            self.last_prog_pos = (self.robot_x, self.robot_y)
+            self.last_prog_time = now
+        elif self.current_goal is not None and now - self.last_prog_time > self.stuck_timeout:
+            self.get_logger().warn("No progress; recovering and abandoning current goal.")
+            self.blacklist.append((self.current_goal[0], self.current_goal[1], now + 25.0))
+            self.recovery_until = now + self.recovery_time
+            self.current_goal, self.path = None, []
+            self.last_prog_time = now
+            self.last_prog_pos = (self.robot_x, self.robot_y)
+            return
+
         if self.current_goal is None:
             return
 

@@ -414,12 +414,12 @@ modest, so we discuss the limiting factors below.
     frontiers by predicted gain over \emph{hallucinated} free space
     (Eq.~\ref{eq:score}) and publishes only the single top frontier,
     with no real-map reachability check. The planner runs A* on the
-    \emph{real} \texttt{/map}; when the chosen frontier is unreachable,
-    the manager retries the same goal rather than falling back to the
-    next-ranked frontier, so the robot can stall on an
-    over-optimistically scored goal. Iterating down the ranked list on
-    A* failure (or masking scores by real-map connectivity) is the
-    natural fix.
+    \emph{real} \texttt{/map}; if the chosen frontier is unreachable,
+    the manager now reverses, temporarily blacklists that goal, and
+    waits for the next one, but it does not yet fall back to the
+    next-ranked frontier (the scorer publishes only the top one).
+    Iterating down the ranked list, or masking scores by real-map
+    connectivity, would remove the residual stalls on larger maps.
   \item \textbf{Fixed input size.} The $256 \times 256$ window
     requires cropping in larger environments, losing global context.
     Patch-based inference or hierarchical models would extend this.
