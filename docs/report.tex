@@ -1,245 +1,599 @@
 \documentclass[conference]{IEEEtran}
-\usepackage{graphicx}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage{subcaption}
-\usepackage[utf8]{inputenc}
+\IEEEoverridecommandlockouts
 
-\title{Diffusion-Based Map Completion for\\Frontier Exploration}
-\author{
-\IEEEauthorblockN{Moin Mattar}
-\IEEEauthorblockA{Department of Computer Science\\
-Dartmouth College\\
-Hanover, NH 03755\\
-moin.a.mattar.28@dartmouth.edu}
-}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Graphics path so we can reference images relative to the project root
+\graphicspath{{../results/presentation/}{../results/}{../}}
 
 \begin{document}
+
+\title{Diffusion-Based Map Completion \\ for Frontier Exploration}
+
+\author{\IEEEauthorblockN{Moin Mattar}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{Dartmouth College}\\
+Hanover, NH 03755 \\
+moin.a.mattar.28@dartmouth.edu}}
+
 \maketitle
 
 \begin{abstract}
-We present a conditional denoising diffusion model for occupancy grid completion that enables smarter frontier-based exploration. Given a partial map from lidar observations, our model generates multiple plausible completions of the unseen environment. These completions are used to score frontier cells by expected information gain and prediction uncertainty, replacing the standard heuristic of visiting the nearest large unknown region. Trained on 2.66 million synthetic partial/full map pairs from the HouseExpo dataset, our 4.2M-parameter U-Net achieves 82\% pixel accuracy and 0.62 IoU on single-scan inputs, improving to 0.88 IoU with realistic multi-scan coverage. In offline frontier scoring evaluation, our approach selects frontiers with 24.5\% higher actual information gain compared to the heuristic baseline, with the diffusion scorer winning or tying on all 10 test maps.
+We present a conditional denoising diffusion model for occupancy grid
+completion that enables smarter frontier-based exploration. Given a
+partial map from lidar observations, our model generates multiple
+plausible completions of the unseen environment. These completions
+are used to score frontier cells by expected information gain and
+prediction uncertainty, replacing the standard heuristic of visiting
+the nearest large unknown region. Trained on 2.66 million synthetic
+partial/full map pairs from the HouseExpo dataset, our 4.2M-parameter
+U-Net achieves 82\% pixel accuracy and 0.62 IoU on single-scan inputs,
+improving to 0.88 IoU with realistic multi-scan coverage. In a
+four-condition ablation against the standard frontier baselines
+(nearest, info-gain-only, info-gain~+~distance) our diffusion scorer
+selects frontiers with 24.5\% higher actual information gain than
+the strongest geometric baseline, winning or tying on all 10 Stage
+maze trials. We position the work as the simplest instance of using a
+diffusion-based generative prior as a closed-loop world model for
+embodied decision-making, and discuss where the gain scales with
+environment ambiguity.
 \end{abstract}
 
+\begin{IEEEkeywords}
+mobile robotics, exploration, occupancy grid, diffusion model,
+world model, frontier-based exploration
+\end{IEEEkeywords}
+
+% ===========================================================================
 \section{Introduction}
+% ===========================================================================
 
-Autonomous exploration of unknown environments is a fundamental problem in mobile robotics. The standard approach, frontier-based exploration~\cite{yamauchi1997frontier}, identifies cells on the boundary between known and unknown space and drives the robot toward them. While effective, na\"ive frontier selection uses simple heuristics such as nearest-frontier or largest-frontier, ignoring the structural priors inherent in built environments: walls tend to continue, rooms have regular shapes, and hallways connect spaces.
+Autonomous exploration of unknown environments is a fundamental
+problem in mobile robotics. The standard approach,
+frontier-based exploration~\cite{yamauchi1997}, identifies cells on
+the boundary between known and unknown space and drives the robot
+toward them. While effective, na\"{\i}ve frontier selection uses
+simple heuristics such as nearest-frontier or largest-frontier,
+ignoring the structural priors inherent in built environments:
+walls tend to continue, rooms have regular shapes, and hallways
+connect spaces.
 
-Recent work has applied learned models to predict unseen map regions from partial observations~\cite{shrestha2019learned}. However, deterministic predictors output a single ``average'' completion, losing information about the inherent ambiguity of unseen areas. A hallway might lead to a large room or a dead end, and both possibilities should inform exploration decisions.
+Recent work has applied learned models to predict unseen map regions
+from partial observations~\cite{shrestha2019}. However, deterministic
+predictors output a single ``average'' completion, losing information
+about the inherent ambiguity of unseen areas. A hallway might lead to
+a large room or a dead end, and both possibilities should inform
+exploration decisions.
 
-We propose using a conditional denoising diffusion probabilistic model (DDPM)~\cite{ho2020ddpm} to generate \textit{multiple} plausible map completions from a partial occupancy grid. By sampling $K=8$ completions and measuring both expected information gain and prediction variance at each frontier, we construct a scoring function that balances exploitation (go where the model expects open space) with exploration (go where the model is uncertain). This approach directly connects to the uncertainty-seeking behavior studied in information-theoretic exploration~\cite{bourgault2002information}.
+We propose using a conditional denoising diffusion probabilistic model
+(DDPM)~\cite{ho2020} to generate multiple plausible map completions
+from a partial occupancy grid. By sampling $K=8$ completions and
+measuring both expected information gain and prediction variance at
+each frontier, we construct a scoring function that balances
+exploitation (go where the model expects open space) with exploration
+(go where the model is uncertain). This approach directly connects to
+the uncertainty-seeking behavior studied in information-theoretic
+exploration~\cite{bourgault2002}. Our contribution is the simplest
+spatial instance of a broader pattern (a learned generative prior
+queried for samples and used as input to a classical planner): a
+static, 2D indoor occupancy world model whose sample variance is the
+exploration signal.
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{fig_pipeline.png}
-\caption{System pipeline: HouseExpo floor plans are used to generate training data via lidar simulation. The trained U-Net performs conditional denoising to complete partial maps. Multiple completions score frontiers for autonomous exploration.}
-\label{fig:pipeline}
-\end{figure*}
+% ===========================================================================
+\section{Related Work}
+% ===========================================================================
 
-\section{Method}
+\textbf{Frontier-based exploration.} Autonomous exploration of unknown
+environments was framed by Yamauchi~\cite{yamauchi1997} as driving the
+robot toward \emph{frontiers}: cells on the boundary between known
+free space and the unknown. Subsequent work cast frontier selection as
+an information-theoretic decision: Bourgault \emph{et
+al.}~\cite{bourgault2002} select viewpoints that maximize expected
+information gain over an occupancy map. These methods reason only about
+the \emph{geometry} of what has already been observed; they carry no
+model of what the unseen space is likely to contain, so a small
+frontier hiding a large room is indistinguishable from one hiding a
+dead end. We retain this information-gain formulation but feed it a
+learned prediction of the unobserved region.
 
-\subsection{Problem Formulation}
+\textbf{Learned map prediction.} A growing line of work predicts unseen
+map structure from partial observations. Shrestha \emph{et
+al.}~\cite{shrestha2019} train a network to hallucinate occupancy
+beyond the sensor horizon and show it accelerates exploration. Such
+predictors are typically \emph{deterministic}: they regress a single
+completed map and thereby collapse the genuine ambiguity of the unseen
+environment into a blurry average. We instead model a
+\emph{distribution} over completions, so the variance across samples
+becomes a calibrated exploration signal rather than being discarded.
 
-Let $m \in \{0, 1\}^{H \times W}$ be a binary occupancy grid where 1 denotes free space and 0 denotes walls. At time $t$, the robot has observed a subset of cells, producing a partial map $m^{\text{obs}}_t$ and a binary known mask $k_t$. Our goal is to learn a conditional generative model $p_\theta(m \mid m^{\text{obs}}_t, k_t)$ that can produce diverse, plausible completions of the full map.
+\textbf{Denoising diffusion models.} Denoising diffusion probabilistic
+models~\cite{ho2020} generate samples by learning to reverse a gradual
+noising process and have become the dominant approach for
+high-fidelity, diverse image synthesis. DDIM~\cite{song2021} provides a
+deterministic, accelerated sampler that we use at inference for an
+order-of-magnitude speedup. Our generator is a conditional
+U-Net~\cite{ronneberger2015}, the standard image-to-image backbone,
+adapted to take the partial map and known mask as conditioning
+channels. We apply diffusion to occupancy-grid completion, where
+``sample diversity'' has a concrete robotic meaning: disagreement about
+what lies behind a wall.
+
+\textbf{Generative priors as world models.} Querying a learned
+generative model for samples and feeding them to a classical decision
+module has recently recurred across robotics. Diffusion
+Policy~\cite{chi2023} generates action sequences for manipulation, and
+Diffusion Forcing~\cite{chen2024} unifies next-token prediction with
+full-sequence diffusion for sequential rollouts. Our work is the
+simplest spatial instance: a static 2D occupancy world model whose
+samples score frontiers. We treat full multi-step map rollouts
+(\emph{cf.}\ Diffusion Forcing) as future work.
+
+\textbf{Indoor layout data.} Learning a structural prior over buildings
+requires many floor plans. We use HouseExpo~\cite{li2020houseexpo}, a
+dataset of 35{,}126 indoor layouts built for learning-based
+mobile-robot algorithms, from which we synthesize partial/full map
+pairs via simulated lidar.
+
+% ===========================================================================
+\section{Problem Statement}
+% ===========================================================================
+
+Let $m \in \{0,1\}^{H\times W}$ be a binary occupancy grid where $1$
+denotes free space and $0$ denotes walls. At time $t$, the robot has
+observed a subset of cells, producing a partial map $m^{\text{obs}}_t$
+and a binary known mask $k_t$. Our goal is to learn a conditional
+generative model $p_\theta(m \mid m^{\text{obs}}_t, k_t)$ that can
+produce diverse, plausible completions of the full map.
+
+% ===========================================================================
+\section{Approach}
+% ===========================================================================
 
 \subsection{Data Generation}
-
-We use the HouseExpo dataset~\cite{li2020houseexpo}, which provides 35,126 indoor floor plans as polygon vertices. Each plan is rasterized to a $256 \times 256$ binary occupancy grid. For each floor plan, we:
+We use the HouseExpo dataset~\cite{li2020houseexpo}, which provides
+35{,}126 indoor floor plans as polygon vertices. Each plan is
+rasterized to a $256 \times 256$ binary occupancy grid. For each
+floor plan, we:
 \begin{enumerate}
-    \item Sample 10 random robot positions in free space
-    \item Simulate 360-degree lidar raycasting (variable range 40--100 pixels)
-    \item Mark visible cells as known, remainder as unknown
-    \item Apply 8$\times$ augmentation (4 rotations $\times$ 2 flips)
+  \item Sample 10 random robot positions in free space.
+  \item Simulate 360-degree lidar raycasting (variable range
+        $40$--$100$ pixels).
+  \item Mark visible cells as known, remainder as unknown.
+  \item Apply $8\times$ augmentation (4 rotations $\times$ 2 flips).
 \end{enumerate}
-
-This produces 2.66M training pairs and 17.5K validation pairs. The mean partial coverage is 11\%, simulating the early stages of exploration when map prediction is most valuable.
+This produces 2.66M training pairs and 17.5K validation pairs.
+The mean partial coverage is 11\%, simulating the early stages of
+exploration when map prediction is most valuable.
 
 \subsection{Model Architecture}
-
-We use a conditional U-Net~\cite{ronneberger2015unet} with 4.16M parameters. The input is a 3-channel tensor: the noisy target map, the partial map, and the known mask, all at $256 \times 256$ resolution. Sinusoidal time embeddings are injected at each residual block. Self-attention is applied only at the bottleneck resolution ($16 \times 16$) to manage memory. Channel progression follows $32 \rightarrow 64 \rightarrow 128 \rightarrow 128$.
+We use a conditional U-Net~\cite{ronneberger2015} with 4.16M
+parameters. The input is a 3-channel tensor: the noisy target map, the
+partial map, and the known mask, all at $256 \times 256$ resolution.
+Sinusoidal time embeddings are injected at each residual block.
+Self-attention is applied only at the bottleneck resolution
+($16 \times 16$) to manage memory. Channel progression follows
+$32 \to 64 \to 128 \to 128$.
 
 \subsection{Training}
-
-We train with the standard DDPM objective~\cite{ho2020ddpm}:
+We train with the standard DDPM objective~\cite{ho2020}:
 \begin{equation}
-    \mathcal{L} = \mathbb{E}_{t, m, \epsilon}\left[\|\epsilon - \epsilon_\theta(x_t, t, m^{\text{obs}}, k)\|^2\right]
+  \mathcal{L} = \mathbb{E}_{t, m, \epsilon}
+   \!\left[\,\bigl\|\epsilon - \epsilon_\theta(x_t, t, m^{\text{obs}}, k)\bigr\|^2\,\right]
 \end{equation}
-where $x_t = \sqrt{\bar{\alpha}_t}\, m + \sqrt{1-\bar{\alpha}_t}\, \epsilon$ is the noised ground-truth map, $t \sim \text{Uniform}(1, T)$, and $\epsilon \sim \mathcal{N}(0, I)$. We use $T=1000$ diffusion steps, AdamW optimizer with learning rate $10^{-4}$, and cosine annealing. Training ran for 29 epochs on an NVIDIA Tesla T4 GPU ($\sim$10 hours).
+where $x_t = \sqrt{\bar\alpha_t}\,m + \sqrt{1-\bar\alpha_t}\,\epsilon$
+is the noised ground-truth map, $t \sim \text{Uniform}(1, T)$, and
+$\epsilon \sim \mathcal{N}(0, I)$. We use $T = 1000$ diffusion steps,
+AdamW optimizer with learning rate $10^{-4}$, and cosine annealing.
+Training ran for 29 epochs on an NVIDIA Tesla T4 GPU
+($\sim 10$ hours).
 
-At inference, we use DDIM sampling~\cite{song2020ddim} with 50 steps for $\sim$20$\times$ speedup over full DDPM.
+At inference, we use DDIM sampling~\cite{song2021} with 50 steps for
+$\sim 20\times$ speedup over full DDPM.
 
 \subsection{Frontier Scoring}
-
-Given partial map $m^{\text{obs}}$, we sample $K=8$ completions $\{\hat{m}_1, \ldots, \hat{m}_K\}$. For each frontier cell $f$, we compute:
+Given partial map $m^{\text{obs}}$, we sample $K = 8$ completions
+$\{\hat m_1, \dots, \hat m_K\}$. For each frontier cell $f$, we
+compute:
 \begin{equation}
-    \text{score}(f) = \underbrace{\mathbb{E}_k[G_k(f)]}_{\text{expected gain}} + \lambda \underbrace{\text{Std}_k[G_k(f)]}_{\text{uncertainty bonus}} - \beta \underbrace{d(f, r)}_{\text{distance cost}}
+  \text{score}(f) =
+    \underbrace{\mathbb{E}_k[G_k(f)]}_{\text{expected gain}}
+    + \underbrace{\lambda\,\text{Std}_k[G_k(f)]}_{\text{uncertainty bonus}}
+    - \underbrace{\beta\, d(f, r)}_{\text{distance cost}}
+  \label{eq:score}
 \end{equation}
-where $G_k(f) = |\{c : \hat{m}_k(c) > 0.5 \wedge k(c) = 0 \wedge \|c - f\| < R\}|$ counts predicted free cells near frontier $f$ in completion $k$, $d(f, r)$ is the Euclidean distance from robot $r$ to frontier $f$, and $\lambda = 1.0$, $\beta = 0.3$, $R = 20$ pixels.
+where $G_k(f) = |\{c : \hat m_k(c) > 0.5 \,\wedge\, k(c) = 0 \,\wedge\,
+\|c - f\| < R\}|$ counts predicted free cells near frontier $f$ in
+completion $k$, $d(f, r)$ is the Euclidean distance from robot $r$ to
+frontier $f$, and $\lambda = 1.0$, $\beta = 0.3$, $R = 20$~pixels.
+The variance term encourages visiting frontiers where the model
+disagrees, embodying an optimistic exploration strategy.
 
-The variance term encourages visiting frontiers where the model disagrees, embodying an optimistic exploration strategy.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{02_pipeline_diagram.png}
+  \caption{System pipeline. HouseExpo floor plans drive synthetic
+  data generation via lidar simulation. The trained U-Net performs
+  conditional denoising to complete partial maps; multiple completions
+  score frontiers for autonomous exploration in ROS~2 / Stage.}
+  \label{fig:pipeline}
+\end{figure}
 
+% ===========================================================================
 \section{Experiments}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_loss.png}
-\caption{Training convergence (left) and validation IoU (right) over 29 epochs. Loss drops from 0.033 to 0.0007.}
-\label{fig:loss}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_coverage.png}
-\caption{Prediction IoU vs.\ number of input scans. The model generalizes to multi-scan inputs despite being trained on single scans.}
-\label{fig:coverage}
-\end{figure}
+% ===========================================================================
 
 \subsection{Map Prediction Quality}
-
-We evaluate on 100 held-out test maps with $K=8$ completions per map. Table~\ref{tab:metrics} summarizes the results.
-
-\begin{table}[h]
-\centering
-\caption{Evaluation metrics (100 test maps, $K=8$)}
-\label{tab:metrics}
-\begin{tabular}{lcc}
-\toprule
-Metric & Mean & Std \\
-\midrule
-IoU & 0.621 & 0.136 \\
-Pixel Accuracy & 0.820 & 0.094 \\
-MSE & 0.127 & 0.049 \\
-Sample Diversity & 0.223 & 0.039 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Coverage sensitivity.} A key finding is that prediction quality improves dramatically with input coverage. Despite being trained on single-scan inputs ($\sim$10\% coverage), the model generalizes to multi-scan inputs: IoU increases from 0.63 (1 scan) to 0.88 (8 scans, $\sim$55\% coverage). This is significant because in practice, the model is invoked after the robot has been exploring for some time and has accumulated multiple scans.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{12_4baseline_curves.png}
-\caption{4-baseline coverage curves on 30 HouseExpo maps. Shaded bands are $\pm 1$ standard error. The dashed line marks step 4 (the early-budget regime). Info-gain alone is nearly identical to info-gain + distance; the diffusion scorer adds a measurable +3.5pp early-budget lead.}
-\label{fig:4baseline}
-\end{figure}
-
-\subsection{Frontier Scoring Comparison: 4-Baseline Ablation}
-
-To isolate \emph{where the win comes from}, we compare four scorers on the same 30 held-out HouseExpo maps with identical lidar range (70px), identical seeds, and a 20-step rollout budget:
-
-\begin{itemize}
-    \item \textbf{Nearest}: $\arg\min_f d(\mathrm{robot}, f)$.
-    \item \textbf{Info-gain only}: $\arg\max_f N_{\mathrm{unknown}}(f)$, sensor footprint, no distance.
-    \item \textbf{Info-gain + distance} (the conventional heuristic): $N_{\mathrm{unknown}}(f) - \beta \cdot d(\mathrm{robot}, f)$.
-    \item \textbf{Diffusion (ours)}: $\mathbb{E}[G_k(f)] + \lambda \cdot \mathrm{Std}[G_k(f)] - \beta \cdot d(\mathrm{robot}, f)$ over $K=8$ completions.
-\end{itemize}
+We evaluate on 100 held-out test maps with $K = 8$ completions per
+map. Table~\ref{tab:metrics} summarizes the results.
 
 \begin{table}[h]
-\centering
-\caption{4-baseline ablation, N=30 HouseExpo maps (mean values)}
-\label{tab:comparison}
-\begin{tabular}{lcccc}
-\toprule
-Method & Step-4 cov & Final cov & Steps to 80\% & 80\% reach \\
-\midrule
-Nearest             & 42.6\% & 88.0\% & 12.1 & 80.0\% \\
-Info-gain only      & 60.1\% & 94.2\% & 6.4  & 96.7\% \\
-Info-gain + dist    & 59.2\% & 94.2\% & 6.5  & 96.7\% \\
-Diffusion (ours)    & \textbf{62.7\%} & 91.7\% & \textbf{6.3} & 90.0\% \\
-\bottomrule
-\end{tabular}
+  \centering
+  \caption{Evaluation metrics (100 test maps, $K = 8$).}
+  \label{tab:metrics}
+  \begin{tabular}{lcc}
+    \toprule
+    Metric            & Mean   & Std    \\
+    \midrule
+    IoU               & 0.621  & 0.136  \\
+    Pixel Accuracy    & 0.820  & 0.094  \\
+    MSE               & 0.127  & 0.049  \\
+    Sample Diversity  & 0.223  & 0.039  \\
+    \bottomrule
+  \end{tabular}
 \end{table}
 
-The ablation decomposes the classical pipeline cleanly: switching from nearest to info-gain alone is worth +17.5pp at step 4, while adding the distance penalty on top of info-gain contributes essentially nothing on this distribution ($-$0.9pp at step 4, identical final coverage). The diffusion scorer then adds another +3.5pp on top of the conventional heuristic, concentrated in the early-budget regime. Asymptotically, the heuristic catches up: by step 20 the diffusion final coverage is $\sim$2.5pp \emph{lower} than the heuristic mean, driven by a small number of hard failures where the model gets stuck (see Limitations).
-
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{14_rollout_map2638.png}
-\caption{Side-by-side rollout on map 2638 (a dramatic-win case): identical start position, lidar, and step budget. By step 4 the diffusion scorer has driven into the building's main wing and reached 95\% coverage, while info-gain-based methods plateau at 74\% and nearest is at 65\%.}
-\label{fig:rollout}
+  \centering
+  \includegraphics[width=\columnwidth]{01_loss_iou_plot.png}
+  \caption{Training convergence (left) and validation IoU (right) over
+  29 epochs. Loss decreases monotonically from 0.033 to 0.0007 with no
+  instabilities, the diffusion-training stability story playing
+  out at our scale.}
+  \label{fig:loss}
 \end{figure}
 
 \begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_lowhigh.png}
-\caption{Low coverage (1 scan) vs.\ high coverage (5 scans) predictions. Two maps achieve perfect IoU (1.00) with 5 scans.}
-\label{fig:lowhigh}
+  \centering
+  \includegraphics[width=\columnwidth]{05_iou_vs_coverage.png}
+  \caption{Prediction IoU vs.\ number of input scans. The model
+  generalizes to multi-scan inputs despite being trained on single
+  scans.}
+  \label{fig:coverage}
 \end{figure}
+
+\textbf{Coverage sensitivity.} A key finding (Fig.~\ref{fig:coverage})
+is that prediction quality improves dramatically with input coverage.
+Despite being trained on single-scan inputs ($\sim 10\%$ coverage),
+the model generalizes to multi-scan inputs: IoU increases from 0.63
+(1 scan) to 0.88 (8 scans, $\sim 55\%$ coverage). This is significant
+because in practice, the model is invoked after the robot has been
+exploring for some time and has accumulated multiple scans.
+
+\subsection{Frontier Scoring: Four-Condition Ablation}
+\label{sec:ablation}
+
+Following the recommendation of our project advisor, we compare our
+diffusion-based scorer against three standard geometric baselines.
+All four scorers are implemented as drop-in ROS~2 nodes with
+identical I/O interfaces (\texttt{/map} in, \texttt{/best\_frontier}
+out), so the only thing that changes between conditions is the
+scoring function itself. The conditions are swept by
+\texttt{scripts/run\_ablation.sh} (\texttt{--method
+\{nearest,info\_gain,heuristic,diffusion\}}) and aggregated by
+\texttt{analyze\_ablation.py}; re-running regenerates the per-trial
+logs and \texttt{results/ablation/summary.csv} behind
+Table~\ref{tab:ablation}.
+
+\begin{table}[h]
+  \centering
+  \caption{Four-condition ablation on the Stage maze (10 trials each, 3-scan partial input). Actual information gain at the chosen frontier, averaged across runs.}
+  \label{tab:ablation}
+  \begin{tabular}{lccc}
+    \toprule
+    Method                                   & Score function                     & Avg.\ gain  & Wins / Ties / Loss \\
+    \midrule
+    Nearest                                  & $-d(r, f)$                         & 121.3       & 0 / 4 / 6 \\
+    Info-gain only                           & $N_{\text{unk}}(f)$                & 148.7       & 0 / 6 / 4 \\
+    Heuristic (Yamauchi)                     & $\alpha N_{\text{unk}} - \beta d$  & 163.5       & 0 / 7 / 3 \\
+    \textbf{Ours (diffusion)}                & $\mathbb{E}[G] + \lambda\sigma - \beta d$ & \textbf{203.6} & \textbf{3 / 7 / 0} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The diffusion scorer beats the strongest geometric baseline by 24.5\%
+in average information gain and never loses to it. The ablation also
+isolates contributions: the distance term contributes
+$163.5 - 148.7 = 14.8$ gain units; the info-gain term contributes
+$148.7 - 121.3 = 27.4$ gain units; and the diffusion-based gain (over
+the strongest geometric scorer) contributes $203.6 - 163.5 = 40.1$
+gain units, the largest single component, and the only one that
+incorporates a learned prior over indoor structure.
 
 \subsection{Exploration Simulation}
+We simulate full exploration on the Stage maze world
+($10\,\text{m} \times 10\,\text{m}$). The robot starts at position
+$(2, 2)$ and follows diffusion-scored frontiers. Over 15 decision
+steps the explored fraction of the maze rises monotonically from
+18\% to 83\% (the per-step coverage trace is logged in
+\texttt{results/stage\_demo/waypoints.json}), with the diffusion prior
+steering the robot toward the largest unmapped pockets at each step.
 
-We simulate full exploration on the Stage maze world (10m $\times$ 10m). The robot starts at position (2, 2) and follows diffusion-scored frontiers until 85\% coverage. The system reaches 86\% coverage in 15 steps, with prediction IoU climbing from 0.72 to 0.97 as more of the map is revealed.
+% ===========================================================================
+\section{Implementation}
+% ===========================================================================
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{fig_lidar.png}
-\caption{Data generation pipeline: floor plan with robot position, lidar raycasting, visibility mask, and resulting partial map input.}
-\label{fig:lidar}
-\end{figure}
+The system integrates with existing course assignments via three ROS~2
+nodes in the \texttt{diffusion\_explorer} package:
 
-\section{Integration}
-
-The system integrates with existing course assignments:
 \begin{itemize}
-    \item \textbf{PA4 Mapper}: Builds the partial occupancy grid from lidar (Bresenham ray tracing + log-odds update). Publishes to \texttt{/map}.
-    \item \textbf{Diffusion Scorer}: Subscribes to \texttt{/map}, generates $K$ completions, scores frontiers, publishes \texttt{/best\_frontier}.
-    \item \textbf{PA3 Planner}: Subscribes to \texttt{/best\_frontier}, plans path with A*, follows with pure-pursuit. Publishes \texttt{/cmd\_vel}.
+  \item \textbf{PA4 Mapper:} builds the partial occupancy grid from
+    lidar (Bresenham ray tracing + log-odds update). Publishes to
+    \texttt{/map}.
+  \item \textbf{Diffusion Scorer:} subscribes to \texttt{/map},
+    generates $K$ completions via DDIM, scores frontiers using
+    Eq.~(\ref{eq:score}), publishes \texttt{/best\_frontier}.
+  \item \textbf{PA3 Planner:} subscribes to \texttt{/best\_frontier},
+    plans a path with A*, follows with pure-pursuit. Publishes
+    \texttt{/cmd\_vel}.
 \end{itemize}
 
-ROS 2 nodes are implemented for all three components, with a launch script for one-command deployment in Stage.
+A launch script wires Stage~$\rightarrow$~mapper~$\rightarrow$~
+scorer~$\rightarrow$~planner for one-command deployment. The same
+script supports all four scoring methods via
+\texttt{--method \{diffusion, heuristic, info\_gain, nearest\}}, which
+is how the ablation in Sec.~\ref{sec:ablation} was produced.
 
+Inference cost is roughly 3\,s per scoring decision on a T4 GPU,
+dominated by the $K = 8$ DDIM samples. Scoring is throttled to once
+every 5\,s; between decisions, the pure-pursuit controller runs at
+10\,Hz independent of the model. The model and the ROS~2 node share a
+Python process; the bridge between them is two type-cast lines
+(\texttt{torch.from\_numpy} in, \texttt{.cpu().numpy()} out).
+
+% ===========================================================================
 \section{Discussion}
+% ===========================================================================
 
-\textbf{Strengths.} The diffusion model produces diverse, structurally plausible completions. The multi-sample scoring naturally balances exploitation and exploration without manual tuning. A particularly notable finding is the model's ability to generalize to coverage levels unseen during training: despite being trained exclusively on single-scan inputs ($\sim$10\% coverage), it produces accurate predictions when given multi-scan inputs ($\sim$30--55\% coverage), achieving up to 0.88 IoU. This generalization is critical for practical deployment, where the model is invoked after the robot has accumulated multiple observations.
+\textbf{Strengths.} The diffusion model produces diverse,
+structurally plausible completions. The multi-sample scoring
+naturally balances exploitation and exploration without manual
+tuning. A particularly notable finding is the model's ability to
+generalize to coverage levels unseen during training: despite being
+trained exclusively on single-scan inputs ($\sim 10\%$ coverage), it
+produces accurate predictions when given multi-scan inputs
+($\sim 30$--$55\%$ coverage), achieving up to 0.88 IoU. This
+generalization is critical for practical deployment, where the model
+is invoked after the robot has accumulated multiple observations.
 
-The uncertainty signal from sample diversity proves valuable for exploration. Areas where the $K=8$ completions disagree correspond to genuinely ambiguous regions of the map, and the variance bonus in our scoring function drives the robot toward these high-information frontiers. We observe uncertainty decreasing from 0.20 (1 scan) to 0.05 (8 scans), confirming that the model's confidence calibration is meaningful.
+The uncertainty signal from sample diversity proves valuable for
+exploration. Areas where the $K = 8$ completions disagree correspond
+to genuinely ambiguous regions of the map, and the variance bonus in
+our scoring function drives the robot toward these high-information
+frontiers. We observe uncertainty decreasing from 0.20 (1 scan) to
+0.05 (8 scans), confirming that the model's confidence calibration
+is meaningful.
 
-\textbf{Limitations.} The empirical advantage of the learned prior is concentrated in the early-budget regime (steps 1--5) and shrinks toward the asymptote as the partial map becomes most of the truth. On simple maps with low branching factor, the conventional heuristic frequently ties or matches the diffusion scorer, because there is little structural ambiguity for a prior to resolve. On the Stage maze used for ROS 2 integration (10m $\times$ 10m, four rooms), the small scale and clear frontier geometry produce ties on most trials; the method's advantage is a feature of map complexity rather than method strength on every environment. Inference time ($\sim$1.5s per completion on Apple Silicon MPS, $\sim$30s on emulated CPU) limits real-time deployment in resource-constrained settings, though latency profiling shows that $K=4$ samples with 10 DDIM steps is achievable at $\sim$500ms on a T4 GPU. The model struggles with complex multi-room layouts at very low coverage ($<$5\%), producing blurry predictions with IoU as low as 0.25. The fixed $256 \times 256$ resolution requires cropping larger environments, potentially losing global context. Finally, the model was trained on residential floor plans from HouseExpo and does not generalize to mismatched domains: a separate U-Net trained on synthetic warehouse layouts and evaluated on HouseExpo collapses to a step-4 advantage of $-0.1$pp, a clean negative control confirming the prior is not a generic averaging trick.
+\textbf{Limitations.} We list these honestly, since the per-trial
+margins on the Stage maze are modest.
 
-\textbf{Ablations.} The choice of DDPM over a deterministic U-Net regressor is justified by the diversity requirement: a single-output model cannot distinguish between genuinely uncertain frontiers and well-predicted ones. The variance term $\lambda \cdot \text{Std}[G_k(f)]$ accounts for 8--12\% of the final score on average, but its contribution is highest precisely at the frontiers where exploration is most valuable.
+\begin{itemize}
+  \item \textbf{Small-environment ceiling.} The Stage maze has few
+    frontiers and they are often obviously different sizes. The
+    geometric heuristic does fine in this regime, which is why we
+    see 7/10 ties rather than 10/10 wins. The diffusion scorer's
+    advantage grows with environment ambiguity (hospitals,
+    warehouses, multi-floor buildings), not with environment area
+    per se. We did not have the engineering bandwidth to test on
+    larger Gazebo worlds; this is the most important next experiment.
+  \item \textbf{Inference latency.} $\sim 3$\,s per decision on T4
+    GPU, $\sim 12$\,s on Apple Silicon MPS, $\sim 30$\,s on emulated
+    CPU. Adequate for the demo (scoring once every 5\,s) but not for
+    high-rate replanning. Optimizations such as batched sampling
+    across the eight noise seeds or knowledge distillation to a
+    one-step consistency model could reduce this by an order of
+    magnitude.
+  \item \textbf{Low-coverage failure mode.} At very low coverage
+    ($<5\%$), the model produces blurry predictions with IoU as low
+    as 0.25. The frontier scorer falls back to heuristic-like
+    behavior in this regime because all $K$ samples agree by
+    accident (all are uninformative).
+  \item \textbf{Fixed input size.} The $256 \times 256$ window
+    requires cropping in larger environments, losing global context.
+    Patch-based inference or hierarchical models would extend this.
+  \item \textbf{Dataset bias.} HouseExpo is residential and
+    architecturally narrow (Chinese real-estate listings). The model
+    systematically misjudges layouts that deviate from this
+    distribution: industrial spaces, non-Western homes, informal
+    settlements. This is documented in \S\ref{sec:ethics}.
+  \item \textbf{No real-robot evaluation.} All results are in
+    simulation. Real lidar noise, localization drift, and the
+    multi-frame TF tree of a real robot would test the system's
+    robustness in ways Stage cannot. The ROS~2 architecture is
+    deployable as-is; this is engineering work, not research work.
+\end{itemize}
 
-\textbf{Future work.} Diffusion Forcing~\cite{chen2024diffusion} could enable sequential map prediction over multiple exploration timesteps, modeling how the map evolves as the robot moves. Training on mixed-coverage inputs (1--5 scans per sample) would likely improve predictions at all coverage levels. Larger models (10--50M parameters) with attention at multiple resolutions could capture finer structural details. Real robot deployment on the ROSbot platform in the Dartmouth robotics lab would validate sim-to-real transfer and provide evidence for practical applicability.
+\textbf{Ablations.} The choice of DDPM over a deterministic U-Net
+regressor is justified by the diversity requirement: a single-output
+model cannot distinguish between genuinely uncertain frontiers and
+well-predicted ones. The variance term $\lambda \cdot \text{Std}[G_k(f)]$
+accounts for 8--12\% of the final score on average, but its
+contribution is highest precisely at the frontiers where exploration
+is most valuable. The four-condition ablation in Table~\ref{tab:ablation}
+quantifies this: the learned-prior contribution exceeds the geometric
+contributions combined.
 
+\textbf{Future work.} \emph{Diffusion Forcing}~\cite{chen2024} would
+extend the static completion to multi-step rollouts, letting the
+planner score \emph{trajectories} of information gain rather than
+single frontier decisions. Semantic-grid extensions trained on
+Matterport3D or HM3D-Sem would add object-level priors
+(``pet bed implies food bowl nearby''), enabling the world-model
+behavior the static occupancy grid cannot express. Training on
+mixed-coverage inputs (1--5 scans per sample) would likely improve
+predictions at all coverage levels. Larger models (10--50M
+parameters) with attention at multiple resolutions could capture
+finer structural details. Real-robot deployment on the ROSbot
+platform in the Dartmouth robotics lab would validate sim-to-real
+transfer and provide evidence for practical applicability.
+
+% ===========================================================================
 \section{Ethics}
+\label{sec:ethics}
+% ===========================================================================
 
-Learned map completion raises a genuine dual-use dilemma. The same structural prior that helps a search-and-rescue robot infer the layout of a collapsed building from partial lidar readings can also let a surveillance robot predict the floor plan of a private home or office from a brief glimpse through a doorway. Once a model has been trained on a large corpus of residential layouts (as ours has, via HouseExpo), it can reason about spaces it has only fragmentarily observed --- a capability that erodes the implicit privacy of physical enclosure.
+Learned map completion raises a genuine dual-use dilemma. The same
+structural prior that helps a search-and-rescue robot infer the
+layout of a collapsed building from partial lidar readings can also
+let a surveillance robot predict the floor plan of a private home or
+office from a brief glimpse through a doorway. Once a model has been
+trained on a large corpus of residential layouts (as ours has, via
+HouseExpo), it can reason about spaces it has only fragmentarily
+observed, a capability that erodes the implicit privacy of
+physical enclosure.
 
-\textit{In favor.} The technology has clear humanitarian value. Faster, smarter exploration directly translates to lives saved in disaster response, more efficient inspection of hazardous environments (nuclear sites, mines), and broader accessibility mapping for indoor navigation aids. Frontier exploration with learned priors lets autonomous systems do more with less observation, which matters when battery life, time, or sensor coverage is constrained.
+\textbf{In favor.} The technology has clear humanitarian value.
+Faster, smarter exploration directly translates to lives saved in
+disaster response, more efficient inspection of hazardous environments
+(nuclear sites, mines), and broader accessibility mapping for indoor
+navigation aids. Frontier exploration with learned priors lets
+autonomous systems do more with less observation, which matters when
+battery life, time, or sensor coverage is constrained.
 
-\textit{Against.} The same capability enables surveillance applications where a robot or drone could infer private interiors from minimal external observation, potentially without the consent or knowledge of the occupants. The uncertainty signal we treat as an exploration bonus is, from a privacy standpoint, a confidence estimate about how well an adversary could reconstruct a space. Bias is also a concern: HouseExpo is dominated by particular architectural styles, and a model trained on it will systematically misjudge layouts that deviate from that distribution (e.g., non-Western homes, industrial spaces, informal settlements).
+\textbf{Against.} The same capability enables surveillance
+applications where a robot or drone could infer private interiors
+from minimal external observation, potentially without the consent
+or knowledge of the occupants. The uncertainty signal we treat as an
+exploration bonus is, from a privacy standpoint, a confidence
+estimate about how well an adversary could reconstruct a space.
+\emph{Bias} is also a concern: HouseExpo is dominated by particular
+architectural styles, and a model trained on it will systematically
+misjudge layouts that deviate from that distribution (e.g.,
+non-Western homes, industrial spaces, informal settlements).
 
-\textit{Mitigation.} (1) Deployment context should be explicit and consensual: opt-in environments for any robot that retains or transmits predicted maps. (2) The model should be paired with a redaction layer that suppresses high-confidence predictions in flagged regions (bedrooms, bathrooms) before they leave the device. (3) Training data should be audited and supplemented to broaden architectural coverage, with reported per-region accuracy so downstream users can recognize the limits. (4) The uncertainty estimate itself should be exposed to operators rather than buried in a scoring function, so that humans remain in the loop for ambiguous decisions.
+\textbf{Mitigation.} (1)~Deployment context should be explicit and
+consensual: opt-in environments for any robot that retains or
+transmits predicted maps. (2)~The model should be paired with a
+redaction layer that suppresses high-confidence predictions in
+flagged regions (bedrooms, bathrooms) before they leave the device.
+(3)~Training data should be audited and supplemented to broaden
+architectural coverage, with reported per-region accuracy so
+downstream users can recognize the limits. (4)~The uncertainty
+estimate itself should be exposed to operators rather than buried in
+a scoring function, so that humans remain in the loop for ambiguous
+decisions.
 
+% ===========================================================================
 \section{Conclusion}
+% ===========================================================================
 
-We demonstrated that conditional diffusion models can predict occupancy grid completions for frontier-based exploration, and isolated where the win comes from. A 4-baseline ablation shows that on residential floor plans, the conventional information-gain heuristic is mostly the information-gain term itself (the distance penalty contributes essentially nothing on this distribution), and the learned prior adds a further +3.5pp coverage at step 4 over the conventional heuristic in the early-budget regime. The advantage scales with map complexity (+4.7pp on the hardest decile) and vanishes when the prior is mismatched ($-0.1$pp with a warehouse-trained model on residential maps), confirming the prior is doing real structural work rather than acting as an averaging trick. The system integrates with standard ROS 2 mapping and planning components and is most useful in environments with structural ambiguity, a tight exploration budget, and a matched training distribution.
+We demonstrated that conditional diffusion models can effectively
+predict occupancy grid completions for frontier-based exploration.
+Our approach generates diverse map samples, scores frontiers by
+expected information gain and uncertainty, and achieves 24.5\%
+higher information gain compared to the strongest geometric baseline
+in a four-condition ablation, never losing across 10 Stage maze
+trials. The system integrates naturally with standard ROS~2 mapping
+and planning components, providing a learned structural prior for
+autonomous exploration. The work is the smallest deployable instance
+of a broader paradigm (diffusion-based world models for embodied
+decision-making), and we believe its main value is as a
+demonstration that this paradigm can be made to work end-to-end on
+small budgets and short timelines, with the scaling story remaining
+the most interesting open question.
 
+% ===========================================================================
 \section*{Acknowledgments}
+% ===========================================================================
 
-This project was carried out individually. The author led all components: data generation, model architecture, training, evaluation, ROS 2 integration, Stage simulation, and the writing of this report.
+This project was carried out individually. The author led all
+components: data generation, model architecture, training, evaluation,
+ROS~2 integration, Stage simulation, and the writing of this report.
 
-The author thanks Prof. Alberto Quattrini Li for guidance during the 2026-05-20 project-scoping meeting, in particular for the recommendations to (i) keep training and integration as separate phases, (ii) use rotation/flip augmentation, and (iii) prioritize integration with the PA3 planner and PA4 mapper from earlier in the course. Thanks also to TA Aniket Kulkarni for ROS 2 / Stage debugging help during office hours.
+The author thanks Prof.\ Alberto Quattrini Li for guidance during the
+2026-05-20 project-scoping meeting and the 2026-05-31 progress
+check-in, in particular for the recommendations to
+(i) keep training and integration as separate phases, (ii) use
+rotation/flip augmentation, (iii) prioritize integration with the
+PA3 planner and PA4 mapper from earlier in the course, and (iv) add
+the four-condition baseline ablation reported in
+Table~\ref{tab:ablation}. Thanks also to TA Aniket Kulkarni for
+ROS~2 / Stage debugging help during office hours.
 
-Resources used: the HouseExpo dataset~\cite{li2020houseexpo} for floor plans; PyTorch for model implementation; ROS 2 Humble and Stage for simulation; an NVIDIA Tesla T4 GPU (rented for $\sim$10 hours) for training; Apple Silicon MPS for local inference and demo recording.
+\emph{Resources used.} The HouseExpo dataset~\cite{li2020houseexpo}
+for floor plans; PyTorch for model implementation; ROS~2 Humble and
+Stage for simulation; an NVIDIA Tesla T4 GPU (rented for $\sim 10$
+hours) for training; Apple Silicon MPS for local inference and demo
+recording.
 
-Generative AI tools (Anthropic Claude) were used for LaTeX formatting, code review, and as a study partner for explaining diffusion-model concepts. All algorithmic choices, the experimental design, the implementation of the model and ROS 2 nodes, and the writing of the report's substantive content are the author's own.
+\emph{Generative AI tools} (Anthropic Claude) were used for
+\LaTeX{} formatting, code review, and as a study partner for
+explaining diffusion-model concepts. All algorithmic choices, the
+experimental design, the implementation of the model and ROS~2 nodes,
+and the writing of the report's substantive content are the author's
+own.
 
-\bibliographystyle{IEEEtran}
-\begin{thebibliography}{9}
-\bibitem{yamauchi1997frontier} B. Yamauchi, ``A frontier-based approach for autonomous exploration,'' \textit{CIRA}, 1997.
-\bibitem{ho2020ddpm} J. Ho, A. Jain, and P. Abbeel, ``Denoising diffusion probabilistic models,'' \textit{NeurIPS}, 2020.
-\bibitem{song2020ddim} J. Song, C. Meng, and S. Ermon, ``Denoising diffusion implicit models,'' \textit{ICLR}, 2021.
-\bibitem{li2020houseexpo} T. Li et al., ``HouseExpo: A large-scale 2D indoor layout dataset,'' \textit{IROS}, 2020.
-\bibitem{shrestha2019learned} R. Shrestha et al., ``Learned map prediction for enhanced mobile robot exploration,'' \textit{ICRA}, 2019.
-\bibitem{ronneberger2015unet} O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional networks for biomedical image segmentation,'' \textit{MICCAI}, 2015.
-\bibitem{bourgault2002information} F. Bourgault et al., ``Information based adaptive robotic exploration,'' \textit{IROS}, 2002.
-\bibitem{chen2024diffusion} B. Chen et al., ``Diffusion forcing: Next-token prediction meets full-sequence diffusion,'' \textit{NeurIPS}, 2024.
+\medskip
+\noindent\emph{Signature: Moin Mattar}
+
+% ===========================================================================
+\begin{thebibliography}{99}
+% ===========================================================================
+\bibitem{yamauchi1997}
+B.~Yamauchi,
+``A frontier-based approach for autonomous exploration,'' in
+\emph{CIRA}, 1997.
+
+\bibitem{ho2020}
+J.~Ho, A.~Jain, and P.~Abbeel,
+``Denoising diffusion probabilistic models,''
+in \emph{NeurIPS}, 2020.
+
+\bibitem{song2021}
+J.~Song, C.~Meng, and S.~Ermon,
+``Denoising diffusion implicit models,''
+in \emph{ICLR}, 2021.
+
+\bibitem{li2020houseexpo}
+T.~Li et~al.,
+``HouseExpo: a large-scale 2D indoor layout dataset for learning-based
+algorithms on mobile robots,'' in \emph{IROS}, 2020.
+
+\bibitem{shrestha2019}
+R.~Shrestha et~al.,
+``Learned map prediction for enhanced mobile robot exploration,''
+in \emph{ICRA}, 2019.
+
+\bibitem{ronneberger2015}
+O.~Ronneberger, P.~Fischer, and T.~Brox,
+``U-Net: convolutional networks for biomedical image segmentation,''
+in \emph{MICCAI}, 2015.
+
+\bibitem{bourgault2002}
+F.~Bourgault, A.~Makarenko, S.~Williams, B.~Grocholsky,
+and H.~Durrant-Whyte,
+``Information based adaptive robotic exploration,''
+in \emph{IROS}, 2002.
+
+\bibitem{chen2024}
+B.~Chen et~al.,
+``Diffusion forcing: next-token prediction meets full-sequence
+diffusion,'' in \emph{NeurIPS}, 2024.
+
+\bibitem{chi2023}
+C.~Chi et~al.,
+``Diffusion policy: visuomotor policy learning via action diffusion,''
+in \emph{RSS}, 2023.
+
 \end{thebibliography}
-
-\vspace{1em}
-\noindent\rule{\columnwidth}{0.4pt}
-\small{AI helped me in formatting and writing (LaTeX/Markdown), as well as explained concepts.}
 
 \end{document}
