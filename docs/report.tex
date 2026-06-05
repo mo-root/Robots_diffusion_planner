@@ -36,14 +36,14 @@ plausible completions of the unseen environment. These completions
 are used to score frontier cells by expected information gain and
 prediction uncertainty, replacing the standard heuristic of visiting
 the nearest large unknown region. Trained on 2.66 million synthetic
-partial/full map pairs from the HouseExpo dataset, our 4.2M-parameter
-U-Net achieves 82\% pixel accuracy and 0.62 IoU on single-scan inputs,
-improving to 0.88 IoU with realistic multi-scan coverage. In a
+partial/full map pairs from the HouseExpo dataset, our 4.16M-parameter
+U-Net achieves 82\% pixel accuracy and 0.62 IoU on the held-out test
+set, with prediction quality improving as the robot accumulates scans. In a
 four-condition ablation against the standard frontier baselines
 (nearest, info-gain-only, info-gain~+~distance) our diffusion scorer
 selects frontiers with 24.5\% higher actual information gain than
-the strongest geometric baseline, winning or tying on all 10 Stage
-maze trials. We position the work as the simplest instance of using a
+the strongest geometric baseline in our Stage maze run, winning or
+tying on all 10 trials. We position the work as the simplest instance of using a
 diffusion-based generative prior as a closed-loop world model for
 embodied decision-making, and discuss where the gain scales with
 environment ambiguity.
@@ -167,7 +167,7 @@ floor plan, we:
 \begin{enumerate}
   \item Sample 10 random robot positions in free space.
   \item Simulate 360-degree lidar raycasting (variable range
-        $40$--$100$ pixels).
+        $40$ to $100$ pixels).
   \item Mark visible cells as known, remainder as unknown.
   \item Apply $8\times$ augmentation (4 rotations $\times$ 2 flips).
 \end{enumerate}
@@ -195,7 +195,8 @@ is the noised ground-truth map, $t \sim \text{Uniform}(1, T)$, and
 $\epsilon \sim \mathcal{N}(0, I)$. We use $T = 1000$ diffusion steps,
 AdamW optimizer with learning rate $10^{-4}$, and cosine annealing.
 Training ran for 29 epochs on an NVIDIA Tesla T4 GPU
-($\sim 10$ hours).
+($\sim 10$ hours); we report results from the epoch-20 checkpoint,
+which gave the best validation IoU.
 
 At inference, we use DDIM sampling~\cite{song2021} with 50 steps for
 $\sim 20\times$ speedup over full DDPM.
@@ -238,7 +239,7 @@ map. Table~\ref{tab:metrics} summarizes the results.
 
 \begin{table}[h]
   \centering
-  \caption{Evaluation metrics (100 test maps, $K = 8$).}
+  \caption{Evaluation metrics on 100 held-out test maps ($K = 8$ completions, epoch-20 checkpoint).}
   \label{tab:metrics}
   \begin{tabular}{lcc}
     \toprule
@@ -256,9 +257,8 @@ map. Table~\ref{tab:metrics} summarizes the results.
   \centering
   \includegraphics[width=\columnwidth]{01_loss_iou_plot.png}
   \caption{Training convergence (left) and validation IoU (right) over
-  29 epochs. Loss decreases monotonically from 0.033 to 0.0007 with no
-  instabilities, the diffusion-training stability story playing
-  out at our scale.}
+  29 epochs. Loss decreases smoothly from 0.033 to about 0.0007 over training,
+  with only minor sub-0.001 fluctuations in the late epochs.}
   \label{fig:loss}
 \end{figure}
 
@@ -275,9 +275,11 @@ map. Table~\ref{tab:metrics} summarizes the results.
 is that prediction quality improves dramatically with input coverage.
 Despite being trained on single-scan inputs ($\sim 10\%$ coverage),
 the model generalizes to multi-scan inputs: IoU increases from 0.63
-(1 scan) to 0.88 (8 scans, $\sim 55\%$ coverage). This is significant
-because in practice, the model is invoked after the robot has been
-exploring for some time and has accumulated multiple scans.
+(1 scan) to 0.88 (8 scans, $\sim 55\%$ coverage). This matters because
+in practice the model is invoked after the robot has accumulated
+several scans. The raw per-scan values behind Fig.~\ref{fig:coverage}
+are not committed as a table but are reproducible by evaluating across
+scan counts.
 
 \subsection{Frontier Scoring: Four-Condition Ablation}
 \label{sec:ablation}
@@ -290,13 +292,14 @@ out), so the only thing that changes between conditions is the
 scoring function itself. The conditions are swept by
 \texttt{scripts/run\_ablation.sh} (\texttt{--method
 \{nearest,info\_gain,heuristic,diffusion\}}) and aggregated by
-\texttt{analyze\_ablation.py}; re-running regenerates the per-trial
-logs and \texttt{results/ablation/summary.csv} behind
-Table~\ref{tab:ablation}.
+\texttt{analyze\_ablation.py}; re-running these scripts regenerates the per-trial logs and writes
+\texttt{results/ablation/summary.csv}, the source for
+Table~\ref{tab:ablation}; those per-trial logs are not committed to
+the repository.
 
 \begin{table}[h]
   \centering
-  \caption{Four-condition ablation on the Stage maze (10 trials each, 3-scan partial input). Actual information gain at the chosen frontier, averaged across runs.}
+  \caption{Four-condition ablation on the Stage maze (10 trials each, 3-scan partial input); per-trial logs are not committed but are regenerated by \texttt{scripts/run\_ablation.sh}. Values are the actual information gain at the chosen frontier, averaged across trials.}
   \label{tab:ablation}
   \begin{tabular}{lccc}
     \toprule
@@ -356,9 +359,9 @@ is how the ablation in Sec.~\ref{sec:ablation} was produced.
 Inference cost is roughly 3\,s per scoring decision on a T4 GPU,
 dominated by the $K = 8$ DDIM samples. Scoring is throttled to once
 every 5\,s; between decisions, the pure-pursuit controller runs at
-10\,Hz independent of the model. The model and the ROS~2 node share a
-Python process; the bridge between them is two type-cast lines
-(\texttt{torch.from\_numpy} in, \texttt{.cpu().numpy()} out).
+10\,Hz independent of the model. The model and the ROS~2 node run in a single Python process, so the
+occupancy grid is passed to the model and read back as in-memory
+NumPy/Torch arrays rather than serialized ROS messages.
 
 % ===========================================================================
 \section{Discussion}
@@ -371,7 +374,7 @@ tuning. A particularly notable finding is the model's ability to
 generalize to coverage levels unseen during training: despite being
 trained exclusively on single-scan inputs ($\sim 10\%$ coverage), it
 produces accurate predictions when given multi-scan inputs
-($\sim 30$--$55\%$ coverage), achieving up to 0.88 IoU. This
+($\sim 30$ to $55\%$ coverage), achieving up to 0.88 IoU. This
 generalization is critical for practical deployment, where the model
 is invoked after the robot has accumulated multiple observations.
 
@@ -379,22 +382,22 @@ The uncertainty signal from sample diversity proves valuable for
 exploration. Areas where the $K = 8$ completions disagree correspond
 to genuinely ambiguous regions of the map, and the variance bonus in
 our scoring function drives the robot toward these high-information
-frontiers. We observe uncertainty decreasing from 0.20 (1 scan) to
-0.05 (8 scans), confirming that the model's confidence calibration
-is meaningful.
+frontiers. Sample disagreement tends to decrease as coverage increases,
+consistent with the model becoming more certain once more of the map
+is observed.
 
-\textbf{Limitations.} We list these honestly, since the per-trial
-margins on the Stage maze are modest.
+\textbf{Limitations.} The per-trial margins on the Stage maze are
+modest, so we discuss the limiting factors below.
 
 \begin{itemize}
   \item \textbf{Small-environment ceiling.} The Stage maze has few
     frontiers and they are often obviously different sizes. The
-    geometric heuristic does fine in this regime, which is why we
+    geometric heuristic performs comparably in this regime, which is why we
     see 7/10 ties rather than 10/10 wins. The diffusion scorer's
     advantage grows with environment ambiguity (hospitals,
     warehouses, multi-floor buildings), not with environment area
-    per se. We did not have the engineering bandwidth to test on
-    larger Gazebo worlds; this is the most important next experiment.
+    per se. Evaluation on larger Gazebo worlds was beyond the scope of this
+    project and is the most important next experiment.
   \item \textbf{Inference latency.} $\sim 3$\,s per decision on T4
     GPU, $\sim 12$\,s on Apple Silicon MPS, $\sim 30$\,s on emulated
     CPU. Adequate for the demo (scoring once every 5\,s) but not for
@@ -407,6 +410,16 @@ margins on the Stage maze are modest.
     as 0.25. The frontier scorer falls back to heuristic-like
     behavior in this regime because all $K$ samples agree by
     accident (all are uninformative).
+  \item \textbf{Unreachable-frontier stalls.} The scorer ranks
+    frontiers by predicted gain over \emph{hallucinated} free space
+    (Eq.~\ref{eq:score}) and publishes only the single top frontier,
+    with no real-map reachability check. The planner runs A* on the
+    \emph{real} \texttt{/map}; when the chosen frontier is unreachable,
+    the manager retries the same goal rather than falling back to the
+    next-ranked frontier, so the robot can stall on an
+    over-optimistically scored goal. Iterating down the ranked list on
+    A* failure (or masking scores by real-map connectivity) is the
+    natural fix.
   \item \textbf{Fixed input size.} The $256 \times 256$ window
     requires cropping in larger environments, losing global context.
     Patch-based inference or hierarchical models would extend this.
@@ -426,11 +439,12 @@ margins on the Stage maze are modest.
 regressor is justified by the diversity requirement: a single-output
 model cannot distinguish between genuinely uncertain frontiers and
 well-predicted ones. The variance term $\lambda \cdot \text{Std}[G_k(f)]$
-accounts for 8--12\% of the final score on average, but its
+accounts for 8 to 12\% of the final score on average, but its
 contribution is highest precisely at the frontiers where exploration
-is most valuable. The four-condition ablation in Table~\ref{tab:ablation}
-quantifies this: the learned-prior contribution exceeds the geometric
-contributions combined.
+is most valuable. In the four-condition ablation
+(Table~\ref{tab:ablation}), the learned-prior contribution (40.1 gain
+units) is the single largest component, on par with the two geometric
+contributions combined (14.8 + 27.4 = 42.2).
 
 \textbf{Future work.} \emph{Diffusion Forcing}~\cite{chen2024} would
 extend the static completion to multi-step rollouts, letting the
@@ -439,8 +453,8 @@ single frontier decisions. Semantic-grid extensions trained on
 Matterport3D or HM3D-Sem would add object-level priors
 (``pet bed implies food bowl nearby''), enabling the world-model
 behavior the static occupancy grid cannot express. Training on
-mixed-coverage inputs (1--5 scans per sample) would likely improve
-predictions at all coverage levels. Larger models (10--50M
+mixed-coverage inputs (1 to 5 scans per sample) would likely improve
+predictions at all coverage levels. Larger models (10 to 50M
 parameters) with attention at multiple resolutions could capture
 finer structural details. Real-robot deployment on the ROSbot
 platform in the Dartmouth robotics lab would validate sim-to-real
@@ -500,9 +514,8 @@ We demonstrated that conditional diffusion models can effectively
 predict occupancy grid completions for frontier-based exploration.
 Our approach generates diverse map samples, scores frontiers by
 expected information gain and uncertainty, and achieves 24.5\%
-higher information gain compared to the strongest geometric baseline
-in a four-condition ablation, never losing across 10 Stage maze
-trials. The system integrates naturally with standard ROS~2 mapping
+higher information gain than the strongest geometric baseline in our
+four-condition Stage ablation, winning or tying on all 10 trials. The system integrates naturally with standard ROS~2 mapping
 and planning components, providing a learned structural prior for
 autonomous exploration. The work is the smallest deployable instance
 of a broader paradigm (diffusion-based world models for embodied

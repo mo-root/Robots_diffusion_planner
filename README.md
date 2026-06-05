@@ -1,8 +1,10 @@
 # Diffusion-Based Map Completion for Frontier Exploration
 
-**COSC 81/281 Final Project** -- Dartmouth College, Spring 2026
+**COSC 81/281 Final Project** · Dartmouth College · Spring 2026
 
 **Author:** Moin Mattar
+
+**🎥 Presentation video:** _add link here (YouTube / Google Drive)_
 
 ## Overview
 
