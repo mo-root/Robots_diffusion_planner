@@ -20,6 +20,7 @@ import os
 import sys
 import math
 import time
+import heapq
 from pathlib import Path
 
 import matplotlib
@@ -33,6 +34,51 @@ sys.path.insert(0, str(Path(__file__).parent))
 from data_generator import load_floor_plan, rasterize_floor_plan, find_free_position, simulate_lidar
 from diffusion import DDPMScheduler
 from unet import ConditionalUNet
+
+
+def _snap(trav, pt):
+    """Nearest traversable cell to pt (frontier centroids can land on a wall)."""
+    if 0 <= pt[0] < trav.shape[0] and 0 <= pt[1] < trav.shape[1] and trav[pt[0], pt[1]]:
+        return (int(pt[0]), int(pt[1]))
+    ys, xs = np.where(trav)
+    if len(ys) == 0:
+        return (int(pt[0]), int(pt[1]))
+    i = ((ys - pt[0]) ** 2 + (xs - pt[1]) ** 2).argmin()
+    return (int(ys[i]), int(xs[i]))
+
+
+def _astar(trav, start, goal):
+    """8-connected A* over a boolean free-space grid, no diagonal corner-cutting.
+
+    Returns a wall-respecting list of (y, x) cells (PA3-style planning), or None.
+    """
+    start, goal = (int(start[0]), int(start[1])), (int(goal[0]), int(goal[1]))
+    H, W = trav.shape
+    if not (trav[start] and trav[goal]):
+        return None
+    nbrs = [(-1, 0, 1.0), (1, 0, 1.0), (0, -1, 1.0), (0, 1, 1.0),
+            (-1, -1, 1.4142), (-1, 1, 1.4142), (1, -1, 1.4142), (1, 1, 1.4142)]
+    openq, g, came = [(0.0, start)], {start: 0.0}, {}
+    while openq:
+        _, cur = heapq.heappop(openq)
+        if cur == goal:
+            path = [cur]
+            while cur in came:
+                cur = came[cur]
+                path.append(cur)
+            return path[::-1]
+        cy, cx = cur
+        for dy, dx, c in nbrs:
+            ny, nx = cy + dy, cx + dx
+            if 0 <= ny < H and 0 <= nx < W and trav[ny, nx]:
+                if dy and dx and not (trav[cy + dy, cx] and trav[cy, cx + dx]):
+                    continue   # no diagonal squeeze through a 1px wall gap
+                ng = g[cur] + c
+                nb = (ny, nx)
+                if ng < g.get(nb, 1e18):
+                    g[nb], came[nb] = ng, cur
+                    heapq.heappush(openq, (ng + ((ny - goal[0]) ** 2 + (nx - goal[1]) ** 2) ** 0.5, nb))
+    return None
 
 try:
     from PIL import Image
@@ -237,19 +283,17 @@ def simulate_exploration(model, scheduler, grid, device, out_dir,
               f"{'IoU='+f'{pred_iou:.2f}' if mode=='diffusion' else ''} "
               f"gain={best_gain:.0f} ({elapsed:.1f}s)")
 
-        # Move robot toward best frontier, scanning along the way
-        ry, rx = robot_pos
-        ty, tx = best_y, best_x
-        dist = math.sqrt((ty-ry)**2 + (tx-rx)**2)
-        n_intermediate = max(1, int(dist / 20))
-        for si in range(1, n_intermediate + 1):
-            frac = si / n_intermediate
-            iy = int(ry + (ty - ry) * frac)
-            ix = int(rx + (tx - rx) * frac)
-            if 0 <= iy < h and 0 <= ix < w and grid[iy, ix] > 0.5:
+        # Move robot to the best frontier along an A* path (PA3-style) that never
+        # crosses a wall, scanning periodically along the route.
+        free = grid > 0.5
+        path = _astar(free, _snap(free, robot_pos), _snap(free, (best_y, best_x)))
+        if path and len(path) > 1:
+            for (iy, ix) in path[1::5]:
                 inter_vis = simulate_lidar(grid, (iy, ix), num_rays=360, max_range_px=70)
                 combined_visible = np.maximum(combined_visible, inter_vis)
-        robot_pos = (best_y, best_x)
+            robot_pos = path[-1]
+        else:
+            robot_pos = (best_y, best_x)
 
     for _ in range(5):
         frames.append(frames[-1])

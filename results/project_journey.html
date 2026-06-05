@@ -712,20 +712,20 @@ table.t td .pill.bad { background: #fdf2f2; color: var(--red); }
 
   <div class="card">
     <h3>The headline animation</h3>
-    <img src="exploration_demo/exploration_diffusion.gif" alt="Diffusion-guided exploration loop">
-    <div class="caption">Point at the middle panel: model's prediction sharpens as the robot scans. Coverage climbs to 91% in 11 steps.</div>
+    <img src="exploration_demo/auto_demo_ros.gif" alt="Diffusion-guided exploration with A* planning and the ROS 2 / Stage node graph">
+    <div class="caption"><b>Top-left:</b> the robot plans an <b>A* path</b> through doorways toward the chosen frontier (green&nbsp;&#9733;) &mdash; it never crosses a wall (verified: 0 wall-cell hits). <b>Top-right:</b> the diffusion model denoising from pure noise into its prediction of the unseen map, then the predicted full map. <b>Bottom strip:</b> the actual <b>ROS&nbsp;2 / Stage node graph</b> &mdash; Stage&nbsp;&rarr; PA4 mapper&nbsp;(<code>/map</code>)&nbsp;&rarr; diffusion scorer&nbsp;(<code>/best_frontier</code>)&nbsp;&rarr; A*&nbsp;planner&nbsp;(<code>/cmd_vel</code>) &mdash; with the live topic flow highlighted as each node fires (scorer while thinking, planner while driving; the planner reads <code>/map</code> for A*). Coverage climbs 7%&nbsp;&rarr;&nbsp;100% as the prediction sharpens from IoU&nbsp;0.68 to&nbsp;1.00. <em>This panel animates the same logic that runs live as ROS&nbsp;2 nodes in Stage (recorded run below).</em></div>
   </div>
 
   <div class="card">
     <h3>Diffusion vs baseline, same map</h3>
     <img src="analysis/figures/17_side_by_side_demo.gif" alt="Diffusion stacked over baseline">
-    <div class="caption">Top row uses imagination. Bottom row does not. Watch the top reach high coverage first.</div>
+    <div class="caption">Top row uses the diffusion prior; bottom row is the pure geometric heuristic. <b>Honest result:</b> on this simple 6-room map both finish exploring (~91% vs 94%) &mdash; the geometric baseline is genuinely competitive when frontiers are few and obvious. The diffusion prior's edge is <i>structural</i>: it picks higher-information frontiers per decision (+24.5% mean info-gain, see Experiments) and that advantage grows with environment ambiguity, not on small maps like this one.</div>
   </div>
 
   <div class="card">
     <h3>Four frontier scorers, synchronized (map 2638)</h3>
     <img src="analysis/figures/16_4method_sync.gif" alt="Four-method synchronized comparison">
-    <div class="caption">Compare the coverage tickers. Nearest crawls. Diffusion (bottom right) reaches 95% first.</div>
+    <div class="caption">Four scorers from the same start. On this simple map all four reach high coverage (Nearest ~95%, the others 97&ndash;99%) &mdash; the coverage race is close here by design. The ablation's point is not winning this race but that the learned prior chooses higher-information frontiers per step (+24.5% over the strongest geometric baseline), an edge that compounds in larger, more ambiguous spaces.</div>
   </div>
 
   <div class="card">
@@ -738,6 +738,12 @@ table.t td .pill.bad { background: #fdf2f2; color: var(--red); }
     <h3>Stage simulator (ROS 2 pipeline)</h3>
     <img src="stage_demo/maze_exploration.gif" alt="Stage maze exploration with diffusion guidance">
     <div class="caption">Show: the diffusion scorer driving a real ROS 2 robot in the PA3 maze world.</div>
+  </div>
+
+  <div class="card">
+    <h3>Live ROS 2 / Stage run (native speed, on a GPU cloud instance)</h3>
+    <img src="ec2_live/live_stage_demo.gif" alt="Live ROS 2 Stage autonomous exploration recorded on EC2">
+    <div class="caption">The <b>actual integrated system running live</b> — Stage simulator + the PA4 occupancy mapper + frontier scorer + the <b>A* planner</b> (planning on the live <code>/map</code>), driving the robot autonomously through the maze in real time (~68% coverage in this clip). Recorded on a GPU EC2 instance because the x86 ROS stack is ~50&times; too slow under emulation on Apple-Silicon laptops. <em>Note: this live run uses the <b>geometric</b> frontier scorer for robust navigation; the diffusion scorer (shown denoising above) loads and runs on the GPU, but its predicted-open frontiers are sometimes behind walls and unreachable by the planner &mdash; an honest integration limitation. Full clip: <code>results/ec2_live/live_stage_demo.mp4</code>.</em></div>
   </div>
 </section>
 

@@ -1,0 +1,83 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded: true
+    Help Height: 0
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Color: 160; 160; 164
+      Plane Cell Count: 20
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: true
+    - Class: rviz_default_plugins/Map
+      Name: PartialMap (/map)
+      Enabled: true
+      Topic:
+        Value: /map
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Color Scheme: map
+      Alpha: 1
+    - Class: rviz_default_plugins/Map
+      Name: DiffusionPrediction (/predicted_map)
+      Enabled: true
+      Topic:
+        Value: /predicted_map
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Color Scheme: costmap
+      Alpha: 0.5
+    - Class: rviz_default_plugins/MarkerArray
+      Name: ScoredFrontiers (/scored_frontiers)
+      Enabled: true
+      Topic:
+        Value: /scored_frontiers
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/Pose
+      Name: BestFrontier (/best_frontier)
+      Enabled: true
+      Topic:
+        Value: /best_frontier
+        Reliability Policy: Reliable
+      Shape: Arrow
+      Color: 0; 255; 0
+    - Class: rviz_default_plugins/Path
+      Name: PlannedPath (/planned_path)
+      Enabled: true
+      Topic:
+        Value: /planned_path
+        Reliability Policy: Reliable
+      Color: 255; 170; 0
+      Line Width: 0.06
+    - Class: rviz_default_plugins/LaserScan
+      Name: LaserScan (/base_scan)
+      Enabled: true
+      Topic:
+        Value: /base_scan
+        Reliability Policy: Best Effort
+      Size (m): 0.05
+      Color: 255; 0; 0
+  Global Options:
+    Fixed Frame: rosbot/odom
+    Background Color: 48; 48; 48
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: TopDown
+      Scale: 60
+      Target Frame: rosbot/odom
+      X: 5
+      Y: 5
+Window Geometry:
+  Height: 800
+  Width: 1200

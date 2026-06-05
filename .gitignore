@@ -38,3 +38,6 @@ docs/*.out
 docs/*.fls
 docs/*.fdb_latexmk
 docs/*.synctex.gz
+
+# auto_demo scratch frames (regenerable)
+demo/auto_frames/

@@ -92,6 +92,9 @@ python3 "$SCRIPT_DIR/exploration_manager.py" --ros-args \
     -p max_angular_speed:=0.5 \
     -p goal_tolerance:=0.5 \
     -p coverage_threshold:=0.90 \
+    -p odom_frame:=rosbot/odom \
+    -p occ_threshold:=50 \
+    -p inflate_radius:=3 \
     > /tmp/explorer.log 2>&1 &
 PIDS+=($!)
 
