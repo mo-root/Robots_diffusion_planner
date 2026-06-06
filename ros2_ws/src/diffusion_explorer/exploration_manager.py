@@ -99,7 +99,10 @@ class ExplorationManager(Node):
 
     # ---------------- callbacks ----------------
     def goal_callback(self, msg: PoseStamped):
-        if self.exploration_done:
+        # Commit to the current goal until it is reached or abandoned; ignore the
+        # scorer's intermediate updates so the robot does not oscillate between
+        # frontiers and actually finishes exploring each one.
+        if self.exploration_done or self.current_goal is not None:
             return
         gx, gy = msg.pose.position.x, msg.pose.position.y
         now = self.get_clock().now().nanoseconds * 1e-9
