@@ -345,10 +345,20 @@ nodes in the \texttt{diffusion\_explorer} package:
   \item \textbf{Diffusion Scorer:} subscribes to \texttt{/map},
     generates $K$ completions via DDIM, scores frontiers using
     Eq.~(\ref{eq:score}), publishes \texttt{/best\_frontier}.
-  \item \textbf{PA3 Planner:} subscribes to \texttt{/best\_frontier},
-    plans a path with A*, follows with pure-pursuit. Publishes
-    \texttt{/cmd\_vel}.
+  \item \textbf{PA3 Planner:} subscribes to \texttt{/best\_frontier}
+    \emph{and} the live \texttt{/map}, plans a collision-free path to
+    the chosen frontier with A* on the current map (inflating obstacles
+    by the robot radius and publishing \texttt{/planned\_path}), then
+    follows it with pure-pursuit plus a reverse-and-replan recovery.
+    Publishes \texttt{/cmd\_vel}.
 \end{itemize}
+
+The coupling is genuinely closed-loop rather than a one-shot pipeline:
+the planner re-runs A* on every \texttt{/map} update, so the mapper's
+growing map continuously reshapes the route; the robot's motion in turn
+extends the map; and the scorer re-reads the same live \texttt{/map} to
+choose the next frontier. All three sub-systems actively influence one
+another, which is the dependency the project is built around.
 
 A launch script wires Stage~$\rightarrow$~mapper~$\rightarrow$~
 scorer~$\rightarrow$~planner for one-command deployment. The same
