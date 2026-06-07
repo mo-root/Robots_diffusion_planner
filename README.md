@@ -4,7 +4,7 @@
 
 **Author:** Moin Mattar
 
-**🎥 Presentation video:** _add link here (YouTube / Google Drive)_
+**🎥 Presentation video:** https://youtu.be/0HEBEHLy_AY
 
 ## Overview
 
