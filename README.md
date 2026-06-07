@@ -1,202 +1,103 @@
-# Diffusion-Based Map Completion for Frontier Exploration
+# 🧭 Diffusion-Based Map Completion for Frontier Exploration
 
-**COSC 81/281 Final Project** · Dartmouth College · Spring 2026
+> **Teaching a robot to _imagine_ the part of a building it hasn't seen yet — and explore smarter because of it.**
 
-**Author:** Moin Mattar
+**COSC 81/281 Final Project** · Dartmouth College · Spring 2026 · _Moin Mattar (solo)_
 
-**🎥 Presentation video:** https://youtu.be/0HEBEHLy_AY
+<p align="center">
+  <a href="https://youtu.be/0HEBEHLy_AY">
+    <img src="https://img.youtube.com/vi/0HEBEHLy_AY/maxresdefault.jpg" width="72%" alt="Watch the presentation">
+  </a>
+  <br><em>▶︎ Click to watch the full project presentation</em>
+</p>
 
-## Overview
+---
 
-A conditional denoising diffusion model (DDPM) that predicts complete occupancy grid maps from partial lidar observations. The predicted maps are used to score frontier cells for smarter autonomous exploration.
+## 💡 The idea: a world model for robots
 
-```
-Partial Map (lidar)     Diffusion Model        Scored Frontiers
- ████████████            ████████████            ████████████
- █·····██···█            █·····██···█            █·····██···█
- █·····██···█    --->    █·····██···█    --->    █·····██···█
- █··R··??????            █··R··██···█            █··R··██···█
- █·····??????            █·····█    █            █·····█  B █  <-- go here
- ████████████            ████████████            ████████████
-    Known only            Predicted full          Best frontier
-```
+Most robots explore **blindly** — they react only to what their sensors have already seen. People don't. Walk into a house, spot a dog toy on the floor, and you already guess there's a dog, and probably a food bowl nearby. That's a **world model**: an understanding of how physical spaces are usually laid out.
 
-The model generates **multiple plausible completions** (K=8 samples), and frontiers are scored by expected information gain + uncertainty bonus. This replaces the standard "biggest unknown patch" heuristic with a learned structural prior.
+This project gives a robot a small version of that intuition. A **conditional diffusion model** looks at a partial occupancy map and _imagines_ the full floor plan — and those imagined completions decide where to explore next.
 
-## Results
+<p align="center"><img src="results/gifs/diversity_denoise.gif" width="60%" alt="diffusion denoising a map from noise"></p>
 
-### Headline finding
+---
 
-**A learned generative prior gives a robot a measurable head-start in early
-exploration on the matched distribution, and zero advantage on a mismatched one.**
-The advantage is largest on complex maps and disappears once most of the building
-has been observed.
-
-### Per-step coverage advantage (N=80 HouseExpo, complexity-stratified)
-
-| Map complexity (initial frontier count) | Step-4 Δ vs baseline | Wins / Losses / Ties |
-|---|---|---|
-| Low (3-15 frontiers) | +2.56% | 10 / 6 / 10 |
-| Mid (15-19 frontiers) | +1.20% | 12 / 14 / 1 |
-| **High (19-35 frontiers)** | **+4.74%** | **18 / 4 / 5** |
-
-### Cross-domain ablation (N=30 HouseExpo)
-
-| Model trained on | Step-4 Δ vs baseline | Wins / Losses / Ties |
-|---|---|---|
-| HouseExpo (in-domain) | **+3.47%** | 18 / 8 / 4 |
-| Warehouse (out-of-domain) | -0.09% | 9 / 12 / 9 |
-
-Same scoring code, same maps, same lidar. Only the training distribution
-differs. The prior helps only when matched to deployment.
-
-### Model quality (sanity-check metrics)
-
-| Metric | Value |
-|---|---|
-| Pixel accuracy | 82.0% |
-| IoU (1 scan) | 0.621 |
-| IoU (5 scans) | 0.875 |
-| Training time | ~10 hours on Tesla T4 |
-
-Live, presentation-ready figures: `results/analysis/figures/`. The full
-interactive walkthrough is `explainer.html`. The 8-slide deck is `slides.html`.
-
-### Denoising Process
-
-Watch noise transform into a predicted floor plan:
-
-![Denoising](results/showcase/02_denoising_process.gif)
-
-### Exploration Demo
-
-The robot explores a maze using diffusion-guided frontier selection:
-
-![Exploration](results/stage_demo/maze_exploration.gif)
-
-## Architecture
-
-| Component | Description |
-|---|---|
-| **Model** | Conditional U-Net (~4.2M params) with sinusoidal time embeddings |
-| **Training** | DDPM (Ho et al. 2020), 1000 diffusion steps, MSE noise prediction loss |
-| **Inference** | DDIM sampling (50 steps) for fast generation |
-| **Data** | HouseExpo dataset (35k floor plans), 2.66M synthetic training pairs |
-| **Integration** | ROS 2 Humble nodes, connects to PA4 mapper + PA3 planner |
-
-## Project Structure
+## ⚙️ How it works
 
 ```
-.
-├── src/                    # Core source code
-│   ├── data_generator.py   # HouseExpo -> (partial, full) training pairs
-│   ├── dataset.py          # PyTorch Dataset loader
-│   ├── unet.py             # Conditional U-Net architecture
-│   ├── diffusion.py        # DDPM forward/reverse process
-│   └── train.py            # Training loop with logging
-├── scripts/                # Utility scripts (AWS setup, data download)
-├── configs/                # Training configurations
-├── tests/                  # Unit tests
-├── data/                   # Dataset (not tracked in git)
-├── results/                # Training outputs
-│   ├── samples/            # Generated sample predictions per epoch
-│   ├── loss_curves/        # Loss plots
-│   └── checkpoints/        # Model weights
-├── docs/                   # Proposal, report, presentation
-├── requirements.txt        # Python dependencies
-└── README.md
+partial map  ──►  diffusion completes it   ──►  score the frontiers   ──►  A* plans & drives
+  (lidar)          (8 sampled completions)       (expected info gain)        (to the best one)
 ```
 
-## Quick Start
+<p align="center"><img src="results/presentation/02_pipeline_diagram.png" width="85%"></p>
 
-### 1. Install dependencies
+- **Data:** [HouseExpo](https://github.com/TeaganLi/HouseExpo) — 35,126 floor plans → **2.66M** partial/complete pairs via simulated lidar + rotation/flip augmentation.
+- **Model:** a **4.16M-parameter** conditional U-Net. Trained with the **DDPM** denoising objective; sampled at inference with **DDIM** (50 steps).
+- **Scoring:** sample **K = 8** completions per map and score each frontier by _expected information gain_ **+** _uncertainty across samples_ **−** _distance_. Where the 8 guesses disagree is exactly where it's worth looking.
+
+<p align="center"><img src="results/presentation/03_frontier_scoring.png" width="68%"></p>
+
+---
+
+## 🤖 Watch it explore
+
+The robot completes the map, scores frontiers, and drives — the bottom strip is the **live ROS 2 node graph** lighting up as each module fires.
+
+<p align="center"><img src="results/exploration_demo/auto_demo_ros.gif" width="80%"></p>
+
+---
+
+## 📊 Results (honestly)
+
+- **0.62 IoU** completing single-scan maps on a held-out test set, sharpening toward **~0.88** as the robot accumulates scans.
+- In our Stage ablation, the diffusion scorer chose frontiers with **+24.5% information gain** over the strongest geometric baseline (winning or tying all 10 trials).
+- **Honest limitation:** on a small, simple maze the classic geometric methods are often just as good. The diffusion prior's advantage grows with environment **ambiguity**, not size — this is a first real step toward world models for robotics, not a finished product.
+
+<p align="center">
+  <img src="results/presentation/05_iou_vs_coverage.png" width="44%">
+  &nbsp;&nbsp;
+  <img src="presentation_media/gifs/00_SIDE_BY_SIDE_DEMO_diffusion_vs_baseline.gif" width="44%">
+</p>
+
+---
+
+## 🔌 Real ROS 2 / Stage integration
+
+It runs as a **closed-loop ROS 2 system**, not a one-shot pipeline. The A* planner replans on the **live** map every update, so the mapper, scorer, and planner continuously influence one another:
+
+```
+Stage ─/base_scan→ PA4 mapper ─/map→ diffusion scorer ─/best_frontier→ A* manager ─/cmd_vel→ Stage
+```
+
+<p align="center"><img src="results/ec2_live/live_stage_demo.gif" width="70%" alt="live ROS 2 / Stage run"></p>
 
 ```bash
-pip install -r requirements.txt
+# from ros2_ws/src/diffusion_explorer/   (needs stage_ros2 + PyTorch installed)
+bash launch_exploration.sh              # diffusion-guided exploration
+bash launch_exploration.sh --baseline   # geometric baseline
 ```
 
-### 2. Download and prepare data
+---
 
-```bash
-# Clone HouseExpo dataset
-git clone https://github.com/TeaganLi/HouseExpo.git data/HouseExpo
-cd data/HouseExpo/HouseExpo && tar -xzf json.tar.gz && cd ../../..
+## 📂 What's in here
 
-# Generate training pairs (~2M samples with augmentation)
-python src/data_generator.py \
-    --json_dir data/HouseExpo/HouseExpo/json \
-    --out_dir data/train \
-    --val_dir data/val \
-    --samples_per_map 10 \
-    --num_workers 8
-```
+| Path | |
+|------|--|
+| `src/` | the model (`unet.py`, `diffusion.py`), training, evaluation |
+| `ros2_ws/src/diffusion_explorer/` | the 3 ROS 2 nodes + launch (diffusion scorer, baseline scorer, A* manager) |
+| `ros2_ws/src/pa4`, `ros2_ws/src/pa3` | the occupancy mapper + maze world the system integrates with |
+| `scripts/` | training + the 4-condition ablation harness |
+| `results/` | trained checkpoint, metrics, figures, demo clips |
+| `docs/report.pdf` | the full IEEE research paper |
+| `results/project_journey.html` | the visual project journal |
 
-### 3. Train
+## 🔗 Links
 
-```bash
-# Local (Apple Silicon)
-python src/train.py --train_dir data/train --val_dir data/val --device mps --batch_size 8 --epochs 100
+- 🎥 **Presentation video:** https://youtu.be/0HEBEHLy_AY
+- 📄 **Report (IEEE paper):** [`docs/report.pdf`](docs/report.pdf)
+- 📓 **Project journal:** [`results/project_journey.html`](results/project_journey.html)
 
-# AWS GPU
-python src/train.py --train_dir data/train --val_dir data/val --device cuda --batch_size 64 --epochs 100
-```
+---
 
-### 4. Evaluate
-
-```bash
-python src/evaluate.py --checkpoint results/checkpoints/model_final.pt --test_dir data/val
-```
-
-## Method
-
-### Data Generation Pipeline
-
-1. Load floor plan polygons from HouseExpo (35,126 indoor layouts)
-2. Rasterize to 256x256 binary occupancy grids
-3. Place robot at random free-space position
-4. Simulate 360-degree lidar raycasting (variable range 40-100px)
-5. Build partial map (visible cells = known, rest = unknown)
-6. Augment with 90/180/270 rotations + horizontal flip (8x data)
-
-### Diffusion Model
-
-- **Forward process:** Gradually add Gaussian noise to ground-truth map over T=1000 steps
-- **Reverse process:** U-Net learns to predict and remove noise, conditioned on partial map + known mask
-- **Sampling:** DDIM with 50 steps for ~20x faster inference than full DDPM
-
-### Frontier Scoring
-
-For each frontier cell on the known/unknown boundary:
-1. Sample K=8 map completions from the diffusion model
-2. For each completion, count newly revealed free cells (information gain)
-3. Score = E[info_gain] + lambda * Std[info_gain] - beta * distance
-
-The variance bonus encourages exploring uncertain areas where the model disagrees.
-
-## Baselines
-
-1. **Heuristic frontier** -- score = nearby unknown cells - distance (no learning)
-2. **Deterministic U-Net** -- same architecture, MSE regression, single prediction
-3. **Diffusion (no variance)** -- expected gain only, no uncertainty bonus
-4. **Diffusion (full)** -- expected gain + variance bonus (ours)
-
-## Timeline
-
-| Date | Milestone |
-|---|---|
-| May 23 | Data pipeline complete, training started |
-| May 27 | Progress check-in: loss curves + sample predictions |
-| June 1 | Final presentation (6 min) |
-| June 6 | Final report + code + demo video |
-
-## References
-
-- Ho et al. "Denoising Diffusion Probabilistic Models" (NeurIPS 2020)
-- Song et al. "Denoising Diffusion Implicit Models" (ICLR 2021)
-- Li et al. "HouseExpo: A Large-scale 2D Indoor Layout Dataset" (IROS 2020)
-- Shrestha et al. "Learned Map Prediction for Enhanced Mobile Robot Exploration" (ICRA 2019)
-- Lin et al. "Online Diffusion-Based 3D Occupancy Prediction at the Frontier" (arXiv 2024)
-
-## License
-
-MIT
+<sub>Solo project — all code, figures, and writing are the author's own. Generative AI (Anthropic Claude) was used for LaTeX/Markdown formatting, code review, and as a study partner for diffusion-model concepts. Signature: <em>Moin Mattar</em>.</sub>
