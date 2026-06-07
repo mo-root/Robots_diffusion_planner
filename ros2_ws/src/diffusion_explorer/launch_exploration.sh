@@ -48,14 +48,14 @@ echo "============================================"
 
 echo "[1/4] Launching Stage simulator..."
 ros2 launch stage_ros2 stage.launch.py \
-    world:=/root/ros2_ws/src/pa3/maze \
+    world:=$SCRIPT_DIR/../pa3/maze \
     enforce_prefixes:=false one_tf_tree:=true \
     > /tmp/stage.log 2>&1 &
 PIDS+=($!)
 sleep 5
 
 echo "[2/4] Launching PA4 occupancy grid mapper..."
-python3 /root/ros2_ws/src/pa4/pa4_grid_mapper.py --ros-args \
+python3 "$SCRIPT_DIR/../pa4/pa4_grid_mapper.py" --ros-args \
     -p resolution:=0.05 \
     -p update_mode:=log_odds \
     -p base_frame:=rosbot/base_link \
